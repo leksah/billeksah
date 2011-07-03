@@ -9,7 +9,7 @@
     CPP#-}
 -----------------------------------------------------------------------------
 --
--- Module      :  IDE.Core.Frame
+-- Module      :  Graphics.Frame
 -- Copyright   :  (c) Juergen Nicklisch-Franken, Hamish Mackenzie
 -- License     :  GNU-GPL
 --
@@ -24,20 +24,38 @@
 
 
 module Graphics.Frame (
-    panePluginInterface
-,   startupFrame
-,   Pane(..)
 
+        -- * Pane class
+    Pane(..)
+,   Position(..)
+
+        -- * Actions
+,   viewSwitchTabs
+,   viewTabsPos
+,   viewNewGroup
+,   viewCollapse
+,   viewSplitHorizontal
 ,   viewSplitVertical
+,   viewMove
+,   viewDetach
+,   viewClosePane
+,   quit
+
+    -- * Internals
 ,   getMainWindow
+,   handleNotebookSwitch
+,   newNotebook
+,   setWindowsSt
+,   initialFrameState
+,   registerFrameState
+
+    -- * Accesing state
+,   getUiManagerSt
 ) where
 
-import Base.State
-import Base.Event
-import Base.PluginTypes
-import Base.MyMissing
+import Base
 import Graphics.Panes
-import Base.PluginTypes (BaseEventValue(..), PluginInterface(..))
+import Graphics.FrameTypes
 
 import Graphics.UI.Gtk hiding (afterToggleOverwrite,onToggleOverwrite)
 import Control.Monad.Reader
@@ -70,147 +88,6 @@ import Data.IORef(newIORef)
 import Debug.Trace (trace)
 -- trace a b = b
 
--- -----------------------------------------------------------
--- * It's a plugin
---
-
-pluginName = "billeksah-pane"
-
-panePluginInterface :: StateM (PluginInterface FrameEvent)
-panePluginInterface = do
-    fe <- makeEvent pluginName
-    return $ PluginInterface {
-         piInit1   = frameInit1,
-         piInit2   = frameInit2,
-         piEvent   = fe,
-         piName    = pluginName,
-         piVersion = Version [1,0,0][]}
-
-frameInit1 :: BaseEvent -> PEvent FrameEvent -> StateM ()
-frameInit1 baseEvent myEvent = trace ("init1 " ++ pluginName) $ do
-    liftIO $ initGtkRc
-    return ()
-
-frameInit2 :: BaseEvent -> PEvent FrameEvent -> StateM ()
-frameInit2 baseEvent myEvent = trace ("init2 " ++ pluginName) $ do
-    uiManager <- getState ("leksah-main.uiManager")
-    res <- registerFrameState (initialFrameState uiManager)
-    case res of
-        Nothing -> return ()
-        Just s -> (evtTrigger baseEvent) (BaseError s) >> return ()
--- ----------------------------------
--- * Events
---
-
---
--- | Events the gui frame triggers
---
-data FrameEvent =
-      ActivatePane String
-    | DeactivatePane String
-    | MovePane String
-    | ChangeLayout
-        deriving Typeable
-
-type FramePrefs = UIManager
-
-makeFrameEvent :: StateM(PEvent FrameEvent)
-makeFrameEvent = makeEvent pluginName
-
-triggerFrameEvent :: FrameEvent -> StateM(FrameEvent)
-triggerFrameEvent          = triggerEvent pluginName
-
-getFrameEvent :: StateM (PEvent FrameEvent)
-getFrameEvent              = getEvent pluginName
-
-registerFrameEvent :: Handler FrameEvent -> StateM HandlerID
-registerFrameEvent handler = getFrameEvent >>= \e -> registerEvent e handler
-
--- ------------------------------------
--- * The state connected with frames
---
-
--- | Shows the state for the implementation of the GUI Frame
---
-data FrameState = FrameState {
-    uiManager       ::  UIManager
-,   windows         ::  [Window]
-,   panes           ::  Map PaneName GenPane
-,   paneMap         ::  (Map PaneName (PanePath, Connections))
-,   activePane      ::  Maybe (PaneName, Connections)
-,   panePathFromNB  ::  Map Notebook PanePath
-,   layout          ::  PaneLayout
-,   recentPanes     ::  [PaneName]}
-    deriving (Show,Typeable)
-
---
--- |  Empty initial frame state
---
-initialFrameState uim = FrameState {
-    uiManager       =   uim
-,   windows         =   []
-,   panes           =   Map.empty
-,   paneMap         =   Map.empty
-,   activePane      =   Nothing
-,   panePathFromNB  =   Map.empty
-,   layout          =   initialLayout
-,   recentPanes     =   []}
-
-
-data GenPane        =   forall alpha beta. (Pane alpha beta) => PaneC alpha
-
-instance Eq GenPane where
-    (==) (PaneC x) (PaneC y) = paneName x == paneName y
-
-instance Ord GenPane where
-    (<=) (PaneC x) (PaneC y) = paneName x <=  paneName y
-
-instance Show GenPane where
-    show (PaneC x)    = "Pane " ++ paneName x
-
--- ---------------------------------------------------------------------
--- * Accessor functions
---
-
-getThis :: (FrameState -> alpha) -> StateM alpha
-getThis sel = do
-    st <- getFrameState
-    return (sel st)
-
-setThis :: (FrameState -> alpha -> FrameState) -> alpha -> StateM ()
-setThis sel value = do
-    st <- getFrameState
-    setFrameState (sel st value)
-
-getWindowsSt    = getThis windows
-setWindowsSt    = setThis (\st value -> st{windows = value})
-getUiManagerSt  = getThis uiManager
-getPanesSt      = getThis panes
-setPanesSt      = setThis (\st value -> st{panes = value})
-getPaneMapSt    = getThis paneMap
-setPaneMapSt    = setThis (\st value -> st{paneMap = value})
-getActivePaneSt = getThis activePane
-setActivePaneSt = setThis (\st value -> st{activePane = value})
-getLayoutSt     = getThis layout
-setLayoutSt     = setThis (\st value -> st{layout = value})
-getPanePathFromNB  = getThis panePathFromNB
-setPanePathFromNB  = setThis (\st value -> st{panePathFromNB = value})
-getRecentPanes  = getThis recentPanes
-setRecentPanes  = setThis (\st value -> st{recentPanes = value})
-
---
--- | The handling of the state of the frame
---
-frameStateName = "billeksah-pane/FrameState"
-
-registerFrameState :: FrameState -> StateM (Maybe String)
-registerFrameState = registerState frameStateName
-
-setFrameState :: FrameState -> StateM ()
-setFrameState      = setState frameStateName
-
-getFrameState :: StateM (FrameState)
-getFrameState      = getState frameStateName
 
 --  ----------------------------------------
 --  * The main interface to the frame system
@@ -349,44 +226,93 @@ class PaneInterface alpha beta => Pane alpha beta where
             Nothing -> return ()
             Just nb -> markLabel nb topWidget hasChanged
 
+
+
+-- ------------------------------------
+-- * The state connected with frames
 --
--- | Set gtk style - call that function once at initialization
+
+-- | Shows the state for the implementation of the GUI Frame
 --
-initGtkRc :: IO ()
-#if MIN_VERSION_gtk(0,11,0)
-initGtkRc = rcParseString ("style \"leksah-close-button-style\"\n" ++
-    "{\n" ++
-    "  GtkWidget::focus-padding = 0\n" ++
-    "  GtkWidget::focus-line-width = 0\n" ++
-    "  xthickness = 0\n" ++
-    "  ythickness = 0\n" ++
-    "}\n" ++
-    "widget \"*.leksah-close-button\" style \"leksah-close-button-style\"")
-#else
-initGtkRc = return ()
-#endif
+data FrameState = FrameState {
+    uiManager       ::  UIManager
+,   windows         ::  [Window]
+,   panes           ::  Map PaneName GenPane
+,   paneMap         ::  (Map PaneName (PanePath, Connections))
+,   activePane      ::  Maybe (PaneName, Connections)
+,   panePathFromNB  ::  Map Notebook PanePath
+,   layout          ::  PaneLayout
+,   recentPanes     ::  [PaneName]}
+    deriving (Show,Typeable)
 
-startupFrame :: String -> StateAction -> StateAction
-startupFrame windowName beforeMainGUI = trace "startupFrame" $ do
-    --    osxApp <- OSX.applicationNew
-    reifyState $ \ stateR -> do
-        win         <-  windowNew
-        widgetSetName win windowName
-        reflectState (setWindowsSt [win]) stateR
+--
+-- |  Empty initial frame state
+--
+initialFrameState uim = FrameState {
+    uiManager       =   uim
+,   windows         =   []
+,   panes           =   Map.empty
+,   paneMap         =   Map.empty
+,   activePane      =   Nothing
+,   panePathFromNB  =   Map.empty
+,   layout          =   initialLayout
+,   recentPanes     =   []}
 
-        vb <- vBoxNew False 1  -- Top-level vbox
-        widgetSetName vb "topBox"
-        containerAdd win vb
-        nb          <-  reflectState (newNotebook []) stateR
-        afterSwitchPage nb (\i -> reflectState (handleNotebookSwitch nb i) stateR)
-        widgetSetName nb "root"
-        win `onDelete` (\ _ -> do reflectState quit stateR; return True)
-        boxPackStart vb nb PackGrow 0
 
-        widgetShowAll win
-        reflectState beforeMainGUI stateR
-        mainGUI
-        return ()
+data GenPane        =   forall alpha beta. (Pane alpha beta) => PaneC alpha
+
+instance Eq GenPane where
+    (==) (PaneC x) (PaneC y) = paneName x == paneName y
+
+instance Ord GenPane where
+    (<=) (PaneC x) (PaneC y) = paneName x <=  paneName y
+
+instance Show GenPane where
+    show (PaneC x)    = "Pane " ++ paneName x
+
+-- ---------------------------------------------------------------------
+-- * Accessor functions
+--
+
+getThis :: (FrameState -> alpha) -> StateM alpha
+getThis sel = do
+    st <- getFrameState
+    return (sel st)
+
+setThis :: (FrameState -> alpha -> FrameState) -> alpha -> StateM ()
+setThis sel value = do
+    st <- getFrameState
+    setFrameState (sel st value)
+
+getWindowsSt    = getThis windows
+setWindowsSt    = setThis (\st value -> st{windows = value})
+getUiManagerSt  = getThis uiManager
+getPanesSt      = getThis panes
+setPanesSt      = setThis (\st value -> st{panes = value})
+getPaneMapSt    = getThis paneMap
+setPaneMapSt    = setThis (\st value -> st{paneMap = value})
+getActivePaneSt = getThis activePane
+setActivePaneSt = setThis (\st value -> st{activePane = value})
+getLayoutSt     = getThis layout
+setLayoutSt     = setThis (\st value -> st{layout = value})
+getPanePathFromNB  = getThis panePathFromNB
+setPanePathFromNB  = setThis (\st value -> st{panePathFromNB = value})
+getRecentPanes  = getThis recentPanes
+setRecentPanes  = setThis (\st value -> st{recentPanes = value})
+
+--
+-- | The handling of the state of the frame
+--
+frameStateName = "billeksah-pane/FrameState"
+
+registerFrameState :: FrameState -> StateM (Maybe String)
+registerFrameState = registerState frameStateName
+
+setFrameState :: FrameState -> StateM ()
+setFrameState      = setState frameStateName
+
+getFrameState :: StateM (FrameState)
+getFrameState      = getState frameStateName
 
 -- | Quit ide -- TODO
 quit :: StateAction
@@ -877,6 +803,19 @@ paneDirectionToPosType LeftP        =   PosLeft
 paneDirectionToPosType RightP       =   PosRight   	
 paneDirectionToPosType TopP         =   PosTop
 paneDirectionToPosType BottomP      =   PosBottom
+
+--
+-- | Closes the current pane
+--
+viewClosePane :: StateM  ()
+viewClosePane = do
+    mbPane <- getActivePaneSt
+    case mbPane of
+        Nothing -> do
+            return ()
+        Just (paneName,_) -> do
+            (PaneC pane) <- paneFromName paneName
+            closePane pane >> return ()
 
 --
 -- | Toggle the tabs of the current notebook

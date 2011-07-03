@@ -18,8 +18,12 @@ module Base.Config (
     writePluginDescr,
     loadPluginConfig,
     writePluginConfig,
+
     loadListFromConfig,
+
     allKnownPlugins,
+    getPrereqChoices,
+
     defaultConfig,
     defaultPlugin
 
@@ -33,10 +37,10 @@ import Base.State
 import qualified Text.PrettyPrint as PP (text)
 import Control.Monad (foldM, filterM, unless)
 import Data.Version (showVersion, parseVersion, Version(..))
-import Data.List (intersperse, isPrefixOf)
+import Data.List (nubBy, intersperse, isPrefixOf)
 import System.Directory (doesFileExist, getDirectoryContents)
 import System.FilePath
-       ((</>), dropExtension, takeExtension, takeFileName)
+       (dropFileName, (</>), dropExtension, takeExtension, takeFileName)
 import Text.ParserCombinators.ReadP (readP_to_S)
 import Data.Maybe (mapMaybe)
 import qualified Data.Map as Map
@@ -241,3 +245,19 @@ allKnownPlugins fp = do
     files        <- filterM (\f -> doesFileExist (fp </> f)) filesAndDirs
     let relevantFiles =  [ fp | fp <- files, takeExtension fp == ".lkshp"]
     mapM (\ fp -> readFields fp pluginDescr defaultPlugin) relevantFiles
+
+getPrereqChoices :: FilePath -> IO [Prerequisite]
+getPrereqChoices currentConfigPath= do
+    possiblePlugins     <-  allKnownPlugins (dropFileName currentConfigPath)
+    let possibleBounds  =   map getStandardBounds possiblePlugins
+    let possibleChoices =   nubBy (\e1 e2 -> fst e1 == fst e2) $
+                                [ e | e@(n,_) <- possibleBounds]
+    return possibleChoices
+
+getStandardBounds :: Plugin -> Prerequisite
+getStandardBounds Plugin{plName = name, plVersion = version} =
+    (name,(Just version,Just (nextVersion version)))
+  where
+    nextVersion (Version (a:b:_) []) = Version [a,b+1] []
+    nextVersion (Version [a] [])     = Version [a,1] []
+    nextVersion (Version [] [])      = Version [1,1] []

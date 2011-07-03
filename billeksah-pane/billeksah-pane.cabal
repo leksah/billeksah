@@ -20,7 +20,9 @@ Library
     exposed-modules:
         Graphics.Panes
         Graphics.Frame
+        Graphics.FrameTypes
         Graphics.Pane
+        Graphics.Menu
     exposed: True
     buildable: True
     hs-source-dirs: src
