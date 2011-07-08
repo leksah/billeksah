@@ -302,16 +302,15 @@ setRecentPanes  = setThis (\st value -> st{recentPanes = value})
 --
 -- | The handling of the state of the frame
 --
-frameStateName = "billeksah-pane/FrameState"
 
 registerFrameState :: FrameState -> StateM (Maybe String)
-registerFrameState = registerState frameStateName
+registerFrameState = registerState FrameStateSel
 
 setFrameState :: FrameState -> StateM ()
-setFrameState      = setState frameStateName
+setFrameState      = setState FrameStateSel
 
 getFrameState :: StateM (FrameState)
-getFrameState      = getState frameStateName
+getFrameState      = getState FrameStateSel
 
 -- | Quit ide -- TODO
 quit :: StateAction

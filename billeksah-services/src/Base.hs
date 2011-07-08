@@ -20,7 +20,7 @@ module Base (
     module Base.PluginTypes,
     module Base.PrinterParser,
     module Base.State,
-
+    module Base.Selector
 ) where
 
 import Base.Config
@@ -30,3 +30,4 @@ import Base.MyMissing
 import Base.PluginTypes
 import Base.PrinterParser
 import Base.State
+import Base.Selector

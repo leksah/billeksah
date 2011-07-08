@@ -1,4 +1,5 @@
-{-# Language ExistentialQuantification, ScopedTypeVariables #-}
+{-# Language ExistentialQuantification, ScopedTypeVariables, StandaloneDeriving,
+    DeriveDataTypeable #-}
 
 -----------------------------------------------------------------------------
 --
@@ -41,8 +42,9 @@ module Base.State (
     registerState',
 ) where
 
---
-import Data.Typeable (cast, Typeable)
+import Base.Selector
+
+import Data.Typeable (typeRepKey, Typeable(..), cast, Typeable)
 import Data.IORef
        (atomicModifyIORef, readIORef, writeIORef, newIORef, IORef)
 import Control.Monad.Reader (ReaderT(..))
@@ -51,19 +53,15 @@ import Data.Map (Map)
 import Control.Monad.Reader.Class (MonadReader(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad (liftM)
-import Data.Maybe (isJust)
+import Data.Maybe (fromJust, isJust)
 import Control.Exception (catch, Exception)
 import Control.Concurrent (forkIO)
 import Prelude hiding (catch)
 
--- | A unique selector is just a string
---
-type Selector = String
-
 --
 -- | A state is a Map from a selector to something
 --
-type State a = Map Selector a
+type State a = Map GenSelector a
 
 --
 -- | The special types getting lost here, but can be recovered by attaching runtime
@@ -171,39 +169,39 @@ getStateM = do
 --
 -- | Registers a key and sets the value
 --
-registerState :: Typeable alpha =>  Selector -> alpha -> StateM (Maybe String)
+registerState :: (Selector alpha,  Typeable beta) => alpha -> beta -> StateM (Maybe String)
 registerState key value = do
     hasIt <- hasState key
     if hasIt then return $ Just $ "State>>registerState: " ++
-                                    "State already registered " ++ key
-             else modifyStateM_ (\st -> Map.insert key (GenState value) st) >> return Nothing
+                                    "State already registered " ++ show key
+             else modifyStateM_ (\st -> Map.insert (GS key) (GenState value) st) >> return Nothing
 
 --
 -- | Registers a key
 --
-registerState' :: Selector -> GenState -> StateM (Maybe String)
+registerState' :: Selector alpha => alpha -> GenState -> StateM (Maybe String)
 registerState' key value = do
     hasIt <- hasState key
     if hasIt then return $ Just $ "State>>registerState: " ++
-                                    "State already registered " ++ key
-             else modifyStateM_ (\st -> Map.insert key value st) >> return Nothing
+                                    "State already registered " ++ show key
+             else modifyStateM_ (\st -> Map.insert (GS key) value st) >> return Nothing
 
 --
 -- | Set a value for a key
 --
-setState :: Typeable alpha => Selector -> alpha -> StateM ()
-setState key value = modifyStateM_ (\ st -> case key `Map.lookup` st of
+setState :: (Selector alpha,  Typeable beta) => alpha  -> beta -> StateM ()
+setState key value = modifyStateM_ (\ st -> case GS key `Map.lookup` st of
                                             Nothing -> error $ "State>>setState: " ++
-                                                            "State not registered " ++ key
-                                            Just _ -> Map.insert key (GenState value) st)
+                                                            "State not registered " ++ show key
+                                            Just _ -> Map.insert (GS key) (GenState value) st)
 
 --
 -- | Get a value for a key
 --
-getState :: Typeable alpha => Selector -> StateM alpha
-getState key = readStateM (\st -> case key `Map.lookup` st of
+getState :: (Selector alpha,  Typeable beta) => alpha  -> StateM beta
+getState key = readStateM (\st -> case GS key `Map.lookup` st of
                                 Nothing -> error $ "State>>getState: " ++
-                                    "State not registered " ++ key
+                                    "State not registered " ++ show key
                                 Just (GenState v) -> case cast v of
                                                         Just s -> s
                                                         Nothing -> error "State>>getState: Cast error")
@@ -211,25 +209,25 @@ getState key = readStateM (\st -> case key `Map.lookup` st of
 --
 -- | Is this state registered?
 --
-hasState :: Selector -> StateM Bool
-hasState sel = readStateM (\st -> case sel `Map.lookup` st of
+hasState :: Selector alpha => alpha -> StateM Bool
+hasState sel = readStateM (\st -> case GS sel `Map.lookup` st of
                                     Nothing -> False
                                     Just _  -> True)
 
 --
 -- | Do the function with the state and set the result as new value
 --
-withState :: Typeable alpha => Selector -> (alpha -> alpha) -> StateM ()
+withState :: (Selector alpha,  Typeable beta) => alpha -> (beta -> beta) -> StateM ()
 withState key f =
     modifyStateM_
-        (\ st -> case key `Map.lookup` st of
+        (\ st -> case (GS key) `Map.lookup` st of
                     Nothing -> error $ "State>>withState: " ++
-                                    "State not registered " ++ key
+                                    "State not registered " ++ show key
                     Just (GenState v) ->
                             let nv = case cast v of
                                         Nothing -> error "State>>withState: Cast error"
                                         Just x -> f x
-                            in Map.insert key (GenState nv) st)
+                            in Map.insert (GS key) (GenState nv) st)
 
 
 

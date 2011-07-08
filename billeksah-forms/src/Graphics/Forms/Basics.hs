@@ -28,6 +28,7 @@ module Graphics.Forms.Basics (
 ,   GUIEventSelector(..)
 ,   GEvent
 ,   GenSelection(..)
+,   PaneSelector(..)
 ,   genericGUIEvents
 ,   allGUIEvents
 
@@ -37,8 +38,7 @@ module Graphics.Forms.Basics (
 
 import Graphics.Forms.Parameters
 import Graphics.UI.Gtk
-import Base.Event
-import Base.State
+import Base
 
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk
 import Data.Unique
@@ -54,6 +54,11 @@ import Base.MyMissing (allOf)
 import Data.Typeable (Typeable)
 
 pluginNameForms = "billeksah-forms"
+
+data PaneSelector = GuiHandlerStateSel | GtkEventsStateSel | FormsEventSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector PaneSelector
 
 -- ---------------------------------------------------------------------
 -- * Basic Types
@@ -113,9 +118,6 @@ data GUIEventSelector = FocusOut        -- ^ generic, the widget looses the focu
     deriving (Eq,Ord,Typeable, Bounded, Enum)
 
 data GenSelection = forall alpha . Typeable alpha => GenSelection alpha
-
-
---    deriving (Eq,Ord,Typeable)
 
 genericGUIEvents = [FocusOut,FocusIn,ButtonPressed,KeyPressed]
 allGUIEvents :: [GUIEventSelector]

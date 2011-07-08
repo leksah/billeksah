@@ -22,9 +22,7 @@ module Graphics.FrameTypes (
 ,   ActionType(..)
 ,   MenuPosition(..)
 ,   ToolPosition(..)
-,   FrameSensitivity(..)
-,   Sensitivity
-,   GenSensitivity(..)
+,   FrameSelector(..)
 ,   panePluginName
 ,   menuBarStateName
 ,   registerFrameEvent
@@ -73,41 +71,14 @@ data ActionDescr = AD {
 ,   adActionType  ::   ActionType
 ,   adMenu        ::   MenuPosition
 ,   adToolbar     ::   ToolPosition
-,   adSensitivities :: [GenSensitivity]
+,   adSensitivities :: [GenSelector]
 }
 
 
-data FrameSensitivity = PaneActiveSens
+data FrameSelector = FrameEventSel | PaneActiveSens | FrameStateSel | ActionStateSel
     deriving (Eq, Ord, Show, Typeable)
 
-instance Sensitivity FrameSensitivity
-
-----
----- | Generic Sensitivity (a type family)
-----
-class (Eq s, Ord s, Show s, Typeable s) => Sensitivity s
-
---
--- | Boxing for sensitivity types
---
-data GenSensitivity = forall s . (Sensitivity s) =>  GS s
-    deriving (Typeable)
-
-deriving instance Show GenSensitivity
-
---
--- | Equality and comparision for sensitivity
---
-instance Eq GenSensitivity where
-    (==) (GS a) (GS b) = if typeOf a == typeOf b then
-                    fromJust (cast a) == b
-                    else False
-
-instance Ord GenSensitivity where
-    compare (GS a) (GS b) = if typeOf a == typeOf b then
-                    compare (fromJust (cast a)) b
-                    else compare (unsafePerformIO $ typeRepKey $ typeOf a)
-                                 (unsafePerformIO $ typeRepKey $ typeOf b)
+instance Selector FrameSelector
 
 type WithSeparator = Bool
 
@@ -147,13 +118,13 @@ data ActionType = ActionNormal | ActionToggle | ActionSubmenu -- TODO ActionSele
 type FramePrefs = UIManager
 
 makeFrameEvent :: StateM(PEvent FrameEvent)
-makeFrameEvent = makeEvent panePluginName
+makeFrameEvent = makeEvent FrameEventSel
 
 triggerFrameEvent :: FrameEvent -> StateM(FrameEvent)
-triggerFrameEvent          = triggerEvent panePluginName
+triggerFrameEvent          = triggerEvent FrameEventSel
 
 getFrameEvent :: StateM (PEvent FrameEvent)
-getFrameEvent              = getEvent panePluginName
+getFrameEvent              = getEvent FrameEventSel
 
 registerFrameEvent :: Handler FrameEvent -> StateM HandlerID
 registerFrameEvent handler = getFrameEvent >>= \e -> registerEvent e handler

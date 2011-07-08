@@ -46,7 +46,7 @@ import Debug.Trace (trace)
 
 formsPluginInterface :: StateM (PluginInterface FormsEvent)
 formsPluginInterface = do
-    fe <- makeEvent pluginNameForms
+    fe <- makeEvent FormsEventSel
     return $ PluginInterface {
          piInit1   = formsInit1,
          piInit2   = formsInit2,
@@ -63,10 +63,10 @@ data FormsEvent = FormsEvent
         deriving (Show, Typeable)
 
 triggerFormsEvent :: FormsEvent -> StateM (FormsEvent)
-triggerFormsEvent = triggerEvent pluginNameForms
+triggerFormsEvent = triggerEvent FormsEventSel
 
 getFormsEvent :: StateM (PEvent FormsEvent)
-getFormsEvent = getEvent pluginNameForms
+getFormsEvent = getEvent FormsEventSel
 
 -- -----------------------------------------------
 -- * Initialization

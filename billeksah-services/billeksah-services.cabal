@@ -26,6 +26,7 @@ Library
         Base.MyMissing
         Base.State
         Base.Config
+        Base.Selector
     exposed: True
     buildable: True
     extensions: CPP

@@ -40,7 +40,7 @@ import Control.Concurrent (yield)
 
 panePluginInterface :: StateM (PluginInterface FrameEvent)
 panePluginInterface = do
-    fe <- makeEvent panePluginName
+    fe <- makeEvent FrameEventSel
     return $ PluginInterface {
          piInit1   = frameInit1,
          piInit2   = frameInit2,

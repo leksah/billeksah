@@ -42,6 +42,7 @@ module Base.Event (
 ) where
 
 import Base.State
+import Base.Selector
 
 import Data.Unique (newUnique, Unique)
 import Data.Map (Map)
@@ -50,7 +51,9 @@ import qualified Data.Map as Map (empty, insert, lookup)
 import Control.Monad (foldM)
 import Data.IORef (newIORef, writeIORef, readIORef, IORef)
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Typeable (cast, Typeable)
+import Data.Typeable (typeRepKey, Typeable(..), cast, Typeable)
+import Data.Maybe (fromJust)
+import System.IO.Unsafe (unsafePerformIO)
 
 --   ---------------------------------
 --  Types
@@ -101,24 +104,24 @@ data EventFactory event handlers = EventFactory {
 --
 -- | Constructs a new event. The plugin name has to be unique!
 --
-makeEvent :: forall alpha . Typeable alpha => String -> StateM (PEvent alpha)
-makeEvent pluginName = do
+makeEvent :: (Selector alpha, Typeable beta) => alpha -> StateM (PEvent beta)
+makeEvent selector = do
     ideRef           <- liftIO $ newIORef (Handlers Map.empty)
     let ef           =  stdEventFactory ideRef
     ev <- mkEvent ef
-    persistEvent pluginName ev
+    persistEvent selector ev
     return ev
 
 --
 -- | Get the event from a plugin name (The type has to fit, otherwise
 --  an error will be thrown).
 --
-getEvent :: Typeable alpha => String -> StateM (PEvent alpha)
-getEvent str = do
-    (GenEvent e) <- getGEvent str
+getEvent :: (Selector alpha, Typeable beta) => alpha -> StateM (PEvent beta)
+getEvent sel = do
+    (GenEvent e) <- getGEvent sel
     case cast e of
         Just v -> return v
-        Nothing -> error ("PluginTypes>>getEvent: Can't cast event " ++ str)
+        Nothing -> error ("PluginTypes>>getEvent: Can't cast event " ++ show sel)
 
 --
 -- | Registers an event handler for this event
@@ -132,8 +135,8 @@ registerEvent event handler = do
 --
 -- | Triggers the event with the provided value
 --
-triggerEvent :: Typeable alpha => String -> alpha -> StateM alpha
-triggerEvent str e = getEvent str >>= \ event -> (evtTrigger event) e
+triggerEvent :: (Selector alpha, Typeable beta) => alpha  -> beta -> StateM beta
+triggerEvent sel e = getEvent sel >>= \ event -> (evtTrigger event) e
 
 --
 -- | Merge two event streams of the same type
@@ -224,14 +227,14 @@ mkEvent ef@EventFactory{efGetHandlers = getHandlers, efSetHandlers = setHandlers
                 Just l      ->  foldM (\ e (_,ah) -> ah e) event (reverse l),
         evtID           = newEvtID}
 
-getGEvent :: String -> StateM GenEvent
-getGEvent key = getState (pluginEventPrefix ++ "." ++ key)
+getGEvent :: Selector alpha => alpha -> StateM GenEvent
+getGEvent key = getState key
 
 pluginEventPrefix = "billeksah-main.event"
 
-persistEvent :: Typeable alpha => String -> PEvent alpha -> StateM ()
+persistEvent :: (Selector alpha, Typeable beta) =>  alpha -> PEvent beta -> StateM ()
 persistEvent key event =
-     registerState  (pluginEventPrefix ++ "." ++ key) (GenEvent event) >> return ()
+     registerState  key (GenEvent event) >> return ()
 
 
 

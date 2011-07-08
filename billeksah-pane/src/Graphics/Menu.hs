@@ -43,18 +43,17 @@ import Data.Maybe (mapMaybe, catMaybes)
 --
 -- | The handling of the state of the frame
 --
-actionStateName = "billeksah-pane/Action"
 
-type ActionState = Map GenSensitivity [String]
+type ActionState = Map GenSelector [String]
 
 registerActionState :: ActionState -> StateM (Maybe String)
-registerActionState = registerState actionStateName
+registerActionState = registerState ActionStateSel
 
 setActionState :: ActionState -> StateM ()
-setActionState    st  = trace ("setActionState: " ++ show st) $ setState actionStateName st
+setActionState    st  = trace ("setActionState: " ++ show st) $ setState ActionStateSel st
 
 getActionState :: StateM (ActionState)
-getActionState      = getState actionStateName
+getActionState      = getState ActionStateSel
 
 initialActionState = Map.empty
 
@@ -75,7 +74,7 @@ initActions uiManager actionDescrs = trace "initActions" $ do
     return (mb,tb)
 
 
-buildActionState :: [ActionDescr] -> Map GenSensitivity [String]
+buildActionState :: [ActionDescr] -> Map GenSelector [String]
 buildActionState actionDescrs = Map.fromList $ zip allSensitivities (map actionStringsFor allSensitivities)
   where
     allSensitivities = nub $ concatMap adSensitivities actionDescrs
@@ -339,7 +338,7 @@ getToolIndexForName tb name = do
 --
 -- | Setting sensivity
 --
-setSensitivity :: Sensitivity s => [(s, Bool)] -> StateM ()
+setSensitivity :: Selector s => [(s, Bool)] -> StateM ()
 setSensitivity l = trace ("setSensitivity" ++ show l) $
     do mapM_ setSensitivitySingle l
        trace ("after setSensitivity" ++ show l) $ return ()
@@ -347,7 +346,7 @@ setSensitivity l = trace ("setSensitivity" ++ show l) $
                 actions <- getActionsFor sens
                 liftIO $ mapM_ (\a -> actionSetSensitive a bool) actions
 
-getActionsFor :: Sensitivity s => s -> StateM [Action]
+getActionsFor :: Selector s => s -> StateM [Action]
 getActionsFor sens = do
     actMap <-  getActionState
     uiManager <- trace ("catMap: " ++ show actMap) getUiManagerSt

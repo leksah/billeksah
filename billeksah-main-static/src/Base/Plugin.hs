@@ -27,7 +27,6 @@ module Base.Plugin (
     BaseEventValue(..),
     runAll,
 
-    pseudoPluginName,
     triggerBaseEvent,
     registerBaseEvent,
     getBaseEvent

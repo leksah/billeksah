@@ -39,7 +39,8 @@ module Graphics.Forms.GUIEvent (
 import Base
 import Graphics.Pane
 import Graphics.Forms.Basics
-       (GUIEventSelector(..), GUIEvent(..), GEvent, pluginNameForms)
+       (PaneSelector(..), GUIEventSelector(..), GUIEvent(..), GEvent,
+        pluginNameForms)
 
 
 import Graphics.UI.Gtk
@@ -87,23 +88,23 @@ newtype GtkRegMap =  GtkRegMap (Map EvtID (Map GUIEventSelector GUIEventReg))
     deriving Typeable
 
 initialRegister = do
-    registerState (pluginNameForms ++ "guiHandler") (Handlers Map.empty :: Handlers GUIEvent)
-    registerState (pluginNameForms ++ "gtkEvents") (GtkRegMap Map.empty)
+    registerState GuiHandlerStateSel (Handlers Map.empty :: Handlers GUIEvent)
+    registerState GtkEventsStateSel (GtkRegMap Map.empty)
 
 -- | All gui events share the same map
 guiEventFactory :: EventFactory GUIEvent (Handlers GUIEvent)
 guiEventFactory = EventFactory {
-        efGetHandlers = getState (pluginNameForms ++ "guiHandler"),
-        efSetHandlers = setState (pluginNameForms ++ "guiHandler")}
+        efGetHandlers = getState GuiHandlerStateSel,
+        efSetHandlers = setState GuiHandlerStateSel}
 
 getGtkHandlers :: StateM GtkRegMap
-getGtkHandlers = getState (pluginNameForms ++ "gtkEvents")
+getGtkHandlers = getState GtkEventsStateSel
 
 setGtkHandlers :: GtkRegMap -> StateM ()
-setGtkHandlers = setState (pluginNameForms ++ "gtkEvents")
+setGtkHandlers = setState GtkEventsStateSel
 
 withGtkHandlers :: (GtkRegMap -> GtkRegMap) -> StateM ()
-withGtkHandlers = withState (pluginNameForms ++ "gtkEvents")
+withGtkHandlers = withState GtkEventsStateSel
 
 --
 -- | Constructs a new event. The plugin name has to be unique!
@@ -112,7 +113,7 @@ makeGUIEvent :: StateM (PEvent GUIEvent)
 makeGUIEvent = do
     let ef           =  guiEventFactory
     ev <- mkEvent ef
-    withState (pluginNameForms ++ "guiHandler") (\ (Handlers handlerMap :: Handlers GUIEvent) ->
+    withState GuiHandlerStateSel (\ (Handlers handlerMap :: Handlers GUIEvent) ->
         case Map.lookup (evtID ev) handlerMap of
                 Just [] -> error "Events>>makeGUIEvent: Event already known"
                 Nothing -> Handlers (Map.insert (evtID ev) [] handlerMap))
@@ -172,7 +173,7 @@ activateGUIEvent'
      -> StateM ()
 activateGUIEvent' widget event registerFunc eventSel = do
     cid <- reifyState $ \ stateR -> registerFunc widget (\ e -> do
-        Handlers handlerMap <- reflectState (getState (pluginNameForms ++ "guiHandler")) stateR
+        Handlers handlerMap <- reflectState (getState GuiHandlerStateSel) stateR
         case Map.lookup (evtID event) handlerMap of
                 Nothing -> error "Events>>activateGUIEvent: Unknown event"
                 Just [] -> return False

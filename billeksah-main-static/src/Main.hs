@@ -69,7 +69,7 @@ main = do
         pluginPath   =  dropFileName pluginCPath
     config       <- loadPluginConfig pluginCPath
     runState (do
-        baseEvent    <- makeEvent pseudoPluginName
+        baseEvent    <- makeEvent MainEventSel
         registerEvent baseEvent (\ e ->
             case e of
                 BaseError str -> liftIO $

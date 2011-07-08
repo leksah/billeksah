@@ -18,6 +18,7 @@ module Base.PluginTypes where
 
 import Base.Event
 import Base.State
+import Base.Selector
 
 import Data.Version (showVersion, Version(..))
 import Data.Typeable (cast, Typeable)
@@ -86,23 +87,25 @@ type Prerequisite  = (PluginName, VersionBounds)
 
 type LoadList      = [Plugin]
 
-pseudoPluginName = "billeksah-main"
+data MainSelector = MainEventSel | ConfigPathSel
+    deriving (Eq,Ord,Show,Typeable)
+
+instance Selector MainSelector
 
 triggerBaseEvent :: BaseEventValue -> StateM(BaseEventValue)
-triggerBaseEvent = triggerEvent pseudoPluginName
+triggerBaseEvent = triggerEvent MainEventSel
 
 getBaseEvent :: StateM (BaseEvent)
-getBaseEvent = getEvent pseudoPluginName
-
-configPathSelector = "billeksah-main.currentConfigPath"
+getBaseEvent = getEvent MainEventSel
 
 registerBaseEvent :: Handler BaseEventValue -> StateM HandlerID
 registerBaseEvent handler = getBaseEvent >>= \e -> registerEvent e handler
+
 setCurrentConfigPath :: FilePath -> StateM ()
-setCurrentConfigPath =  setState configPathSelector
+setCurrentConfigPath =  setState ConfigPathSel
 
 getCurrentConfigPath :: StateM FilePath
-getCurrentConfigPath = getState configPathSelector
+getCurrentConfigPath = getState ConfigPathSel
 
 registerCurrentConfigPath :: FilePath -> StateM (Maybe String)
-registerCurrentConfigPath = registerState configPathSelector
+registerCurrentConfigPath = registerState ConfigPathSel
