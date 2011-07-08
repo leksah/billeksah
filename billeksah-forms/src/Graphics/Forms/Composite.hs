@@ -3,7 +3,7 @@
 -- Module      :  Graphics.UI.Editor.Composite
 -- Copyright   :  (c) Juergen Nicklisch-Franken, Hamish Mackenzie
 -- License     :  GNU-GPL
---
+--2
 -- Maintainer  :  <maintainer at leksah.org>
 -- Stability   :  provisional
 -- Portability :  portable

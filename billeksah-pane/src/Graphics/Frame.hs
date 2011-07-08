@@ -27,7 +27,6 @@ module Graphics.Frame (
 
         -- * Pane class
     Pane(..)
-,   Position(..)
 
         -- * Actions
 ,   viewSwitchTabs
