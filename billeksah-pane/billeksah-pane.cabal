@@ -23,6 +23,7 @@ Library
         Graphics.FrameTypes
         Graphics.Pane
         Graphics.Menu
+        Graphics.Session
     exposed: True
     buildable: True
     hs-source-dirs: src
@@ -37,5 +38,6 @@ Library
         filepath >= 1.2.0.0 && < 1.3,
         gtk >= 0.12.0 && < 0.13,
         glib >= 0.12.0 && < 0.13,
+        time >= 1.2 && < 1.3,
 
         billeksah-services >= 1.0.0 && < 1.1

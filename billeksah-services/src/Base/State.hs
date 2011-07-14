@@ -198,7 +198,7 @@ setState key value = modifyStateM_ (\ st -> case GS key `Map.lookup` st of
 --
 -- | Get a value for a key
 --
-getState :: (Selector alpha,  Typeable beta) => alpha  -> StateM beta
+getState :: (Selector alpha, Typeable beta) => alpha  -> StateM beta
 getState key = readStateM (\st -> case GS key `Map.lookup` st of
                                 Nothing -> error $ "State>>getState: " ++
                                     "State not registered " ++ show key

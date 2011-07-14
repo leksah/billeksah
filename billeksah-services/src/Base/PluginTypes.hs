@@ -73,7 +73,7 @@ data Plugin        = Plugin {
     plModule        :: String,
     plInterface     :: String,
     plSynopsis      :: String}
-    deriving (Eq,Ord,Show)
+    deriving (Eq,Ord,Show, Read)
 
 -- | Get the name of the plugin, which includes its version
 getPluginName :: Plugin -> String

@@ -16,16 +16,14 @@
 ---------------------------------------------------------------------------------
 
 module Graphics.FrameTypes (
-    triggerFrameEvent
-,   FrameEvent(..)
+    panePluginName
 ,   ActionDescr(..)
 ,   ActionType(..)
 ,   MenuPosition(..)
 ,   ToolPosition(..)
 ,   FrameSelector(..)
-,   panePluginName
-,   menuBarStateName
-,   registerFrameEvent
+,   SessionExtension(..)
+,   GenSessionExtension(..)
 ) where
 
 import Base
@@ -38,22 +36,7 @@ import Data.Maybe (fromJust)
 import System.IO.Unsafe (unsafePerformIO)
 
 panePluginName = "billeksah-pane"
-menuBarStateName = panePluginName ++ ".menuBar"
 
--- ----------------------------------
--- * Events
---
-
---
--- | Events the gui frame triggers
---
-data FrameEvent =
-      ActivatePane String
-    | DeactivatePane String
-    | MovePane String
-    | ChangeLayout
-    | RegisterActions [ActionDescr]
-        deriving Typeable
 
 -- | ActionDescr is a data structure used for
 --   menus, toolbars, and accelerator keystrokes. In this implementation
@@ -69,8 +52,8 @@ data ActionDescr = AD {
 ,   adAccelerator ::   Maybe String   -- ^ Keyboard accelerator
         -- ^ The format looks like "<Control>a" or "<Shift><Alt>F1" or "<Release>z"
 ,   adActionType  ::   ActionType
-,   adMenu        ::   MenuPosition
-,   adToolbar     ::   ToolPosition
+,   adMenu        ::   Maybe MenuPosition
+,   adToolbar     ::   Maybe ToolPosition
 ,   adSensitivities :: [GenSelector]
 }
 
@@ -94,7 +77,6 @@ data MenuPosition =
                                           --   If the Bool is true add a separator between.
     | MPOr MenuPosition MenuPosition      -- ^ Try the first position.
                                           --   If this fails try the next.
-    | MPNo                                -- ^ This action doesn't appear in a menu
     deriving Eq
 
 data ToolPosition =
@@ -106,7 +88,6 @@ data ToolPosition =
     | TPAppend WithSeparator            -- ^ Append this after the last added item.
     | TPOr ToolPosition ToolPosition    -- ^ Try the first position.
                                         --   If this fails try the next.
-    | TPNo                              -- ^ This action doesn't appear in the toolbar
     deriving Eq
 
 -- | Beside Standard action we have actions which toggles a state or select from a
@@ -117,14 +98,13 @@ data ActionType = ActionNormal | ActionToggle | ActionSubmenu -- TODO ActionSele
 
 type FramePrefs = UIManager
 
-makeFrameEvent :: StateM(PEvent FrameEvent)
-makeFrameEvent = makeEvent FrameEventSel
+data (Read alpha, Show alpha) => SessionExtension alpha = SessionExtension {
+    seName       :: String,
+    seRetriever  :: StateM alpha,
+    seApplicator :: alpha -> StateM ()}
 
-triggerFrameEvent :: FrameEvent -> StateM(FrameEvent)
-triggerFrameEvent          = triggerEvent FrameEventSel
+data GenSessionExtension = forall alpha . (Read alpha, Show alpha) => GenS (SessionExtension alpha)
 
-getFrameEvent :: StateM (PEvent FrameEvent)
-getFrameEvent              = getEvent FrameEventSel
 
-registerFrameEvent :: Handler FrameEvent -> StateM HandlerID
-registerFrameEvent handler = getFrameEvent >>= \e -> registerEvent e handler
+
+

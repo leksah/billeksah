@@ -36,6 +36,7 @@ import qualified Data.Map as Map (fromList, empty)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Map (Map)
 import Data.Typeable (Typeable)
+import Leksah.Dummy (dummyPluginInterface)
 
 
 data Flag
@@ -52,7 +53,8 @@ pluginTable = Map.fromList [
     ("billeksah-forms", GenInterfaceM formsPluginInterface),
     ("billeksah-pane", GenInterfaceM panePluginInterface),
     ("leksah-main", GenInterfaceM leksahPluginInterface),
-    ("leksah-plugin-pane", GenInterfaceM pluginPanePluginInterface)]
+    ("leksah-plugin-pane", GenInterfaceM pluginPanePluginInterface),
+    ("leksah-dummy", GenInterfaceM dummyPluginInterface)]
 
 getOpts :: [String] -> IO ([Flag], [String])
 getOpts argv =
@@ -70,11 +72,9 @@ main = do
     config       <- loadPluginConfig pluginCPath
     runState (do
         baseEvent    <- makeEvent MainEventSel
-        registerEvent baseEvent (\ e ->
-            case e of
-                BaseError str -> liftIO $
-                                putStrLn ("billeksah-base error: " ++ str) >> return e
-                otherwise     -> return e)
+        registerEvent'  baseEvent (\ e -> case e of
+                                            BaseError str -> liftIO $ putStrLn ("billeksah-base error: " ++ str)
+                                            otherwise -> return ())
         res <- registerCurrentConfigPath pluginCPath
         case res of
             Nothing -> return ()

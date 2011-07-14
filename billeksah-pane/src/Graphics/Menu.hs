@@ -36,7 +36,7 @@ import Control.Monad (liftM, when, foldM_, filterM, foldM)
 import Data.List (nub, elemIndex)
 import Data.Map (Map)
 import qualified Data.Map as Map (fromList, lookup, empty)
-import Data.Maybe (mapMaybe, catMaybes)
+import Data.Maybe (fromJust, mapMaybe, catMaybes)
 
 
 
@@ -116,7 +116,7 @@ buildAction uiManager accGroup actionGroup toolBar mb lastPosition actionDescr =
 buildMenuItem :: ActionClass alpha => UIManager -> MenuBar -> Maybe alpha -> ActionDescr
                     -> Maybe (MenuShell,Int) -> IO (Maybe (MenuShell,Int))
 buildMenuItem uiManager mb mbAction ad@AD{adMenu = menuPos, adName = name} mbLast
-    | menuPos == MPNo = case adAccelerator ad of
+    | menuPos == Nothing = case adAccelerator ad of
                             Nothing -> return mbLast
                             Just str -> do
                                 uiManagerAddUiFromString uiManager $
@@ -125,7 +125,7 @@ buildMenuItem uiManager mb mbAction ad@AD{adMenu = menuPos, adName = name} mbLas
                                 return mbLast
     | otherwise        = do
         menuItem <- mkMenuItem mbAction ad
-        res <- getInsertion (castToMenuShell mb) menuPos
+        res <- getInsertion (castToMenuShell mb) (fromJust menuPos)
         case res of
             Nothing -> error ("Menu>>buildMenuItem: No valid position for: " ++ adName ad)
             Just (Prepend ms) -> do
@@ -180,10 +180,10 @@ buildToolItem :: ActionClass alpha => UIManager -> Toolbar -> Maybe alpha -> Act
 buildToolItem uiManager tig Nothing ad@AD{adToolbar = toolPos, adName = name} mbLast
                      = return mbLast
 buildToolItem uiManager tb (Just action) ad@AD{adToolbar = toolPos, adName = name} mbLast
-    | toolPos == TPNo = return mbLast
+    | toolPos == Nothing = return mbLast
     | otherwise      = do
         toolItem <- liftM castToToolItem (actionCreateToolItem action)
-        res <- getToolInsertion tb toolPos
+        res <- getToolInsertion tb (fromJust toolPos)
         case res of
             Nothing -> error ("Menu>>buildToolItem: No valid position for: " ++ adName ad)
             Just (InsertTool ind True) -> do
@@ -349,7 +349,7 @@ setSensitivity l = trace ("setSensitivity" ++ show l) $
 getActionsFor :: Selector s => s -> StateM [Action]
 getActionsFor sens = do
     actMap <-  getActionState
-    uiManager <- trace ("catMap: " ++ show actMap) getUiManagerSt
+    uiManager <- getUiManagerSt
     case Map.lookup (GS sens) actMap of
         Nothing -> return []
         Just l -> do

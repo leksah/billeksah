@@ -30,15 +30,15 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Control.Monad (when)
 
-data FormPaneDescr alpha beta gamma =  FormPaneDescr {
-    fpGetPane      :: Pane beta gamma => VBox -> Injector alpha -> Extractor alpha -> beta,
+data FormPaneDescr alpha beta  =  FormPaneDescr {
+    fpGetPane      :: Pane beta  => VBox -> Injector alpha -> Extractor alpha -> beta,
     fpSaveAction   :: alpha -> StateM (),
     fpEqual        :: alpha -> alpha -> Bool,
     fpGuiHandlers  :: [([GUIEventSelector],Handler GUIEvent)],
     fpExtraButtons :: [(String,StateM ())]}
 
 
-buildFormsPane :: Pane beta gamma => FieldDescription alpha  ->  alpha  -> FormPaneDescr alpha beta gamma
+buildFormsPane :: Pane beta  => FieldDescription alpha  ->  alpha  -> FormPaneDescr alpha beta
                         -> (PanePath -> Notebook -> Window -> StateM (Maybe beta, Connections))
 buildFormsPane descr val formDescr = \ panePath notebook window -> do
     reifyState (\ stateR -> do

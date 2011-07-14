@@ -52,6 +52,7 @@ import Data.Version (showVersion, Version(..))
 import Base.PluginTypes (VersionBounds, PluginName, Prerequisite)
 import Control.Monad (liftM)
 import Base.MyMissing (trim)
+import qualified Text.Parsec as P (parse)
 
 -- | A type for printing something
 type Printer beta       =   beta -> PP.Doc
@@ -271,14 +272,21 @@ showFields date dateDesc = PP.render $
 
 readFields :: FilePath -> [FieldDescriptionS alpha] -> alpha -> IO alpha
 readFields fn fieldDescrs defaultValue = catch (do
-    res <- P.parseFromFile (parseFields defaultValue fieldDescrs) fn
+    res <- P.parseFromFile (parseFields' defaultValue fieldDescrs) fn
     case res of
                 Left pe -> error $ "Error reading file " ++ show fn ++ " " ++ show pe
                 Right r -> return r)
     (\ e -> error $ "Error reading file " ++ show fn ++ " " ++ show e)
 
-parseFields ::  alpha ->  [FieldDescriptionS alpha] ->  P.CharParser () alpha
-parseFields defaultValue descriptions =
+parseFields :: String -> [FieldDescriptionS alpha] -> alpha -> alpha
+parseFields str fieldDescrs defaultValue =
+    case P.parse (parseFields' defaultValue fieldDescrs) "" str of
+                Left pe -> error $ "Parse error " ++ show pe
+                Right r -> r
+
+
+parseFields' ::  alpha ->  [FieldDescriptionS alpha] ->  P.CharParser () alpha
+parseFields' defaultValue descriptions =
     let parsersF = map fieldParser descriptions in do
         res <-  applyFieldParsers defaultValue parsersF
         return res

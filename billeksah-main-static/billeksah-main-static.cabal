@@ -38,5 +38,5 @@ Executable billeksah-main-static
         billeksah-forms  >= 1.0.0 && < 1.1,
         billeksah-pane  >= 1.0.0 && < 1.1,
         leksah-main >= 1.0.0 && < 1.1,
-        leksah-plugin-pane  >= 1.0.0 && < 1.1
---        leksah-dummy >= 1.0.0 && < 1.1
+        leksah-plugin-pane  >= 1.0.0 && < 1.1,
+        leksah-dummy >= 1.0.0 && < 1.1

@@ -27,7 +27,6 @@ module Base.Plugin (
     runAll,
 
     triggerBaseEvent,
-    registerBaseEvent,
     getBaseEvent
 ) where
 

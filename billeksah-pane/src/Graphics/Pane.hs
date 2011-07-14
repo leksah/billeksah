@@ -18,6 +18,7 @@ module Graphics.Pane (
     module Graphics.Frame,
     module Graphics.FrameTypes,
     module Graphics.Panes,
+    module Graphics.Session,
     setSensitivity,
     panePluginInterface
 ) where
@@ -27,6 +28,7 @@ import Graphics.FrameTypes
 import Graphics.Frame
 import Graphics.Panes
 import Graphics.Menu
+import Graphics.Session
 
 import Graphics.UI.Gtk
 import Debug.Trace (trace)
@@ -66,12 +68,11 @@ frameInit2 baseEvent myEvent = trace ("init2 " ++ panePluginName) $ do
     case res of
         Nothing -> return ()
         Just s -> (evtTrigger baseEvent) (BaseError s) >> return ()
-    registerFrameEvent (\ e -> case e of
-                            ActivatePane _ -> setSensitivity [(PaneActiveSens, True)] >> return e
-                            otherwise -> return e)
-    registerFrameEvent (\ e -> case e of
-                            DeactivatePane _ -> setSensitivity [(PaneActiveSens, False)] >> return e
-                            otherwise -> return e)
+    getFrameEvent >>= \e -> registerEvent' e
+        (\s -> case s of
+            ActivatePane _   -> setSensitivity [(PaneActiveSens, True)]
+            DeactivatePane _ -> setSensitivity [(PaneActiveSens, False)]
+            _                -> return ())
     return ()
 
 
@@ -80,52 +81,61 @@ frameInit2 baseEvent myEvent = trace ("init2 " ++ panePluginName) $ do
 --
 frameActions :: [ActionDescr]
 frameActions =
-    [AD "File" "_File" Nothing Nothing (return ()) Nothing ActionSubmenu (MPFirst []) TPNo []
-    ,AD "Quit" "_Quit" Nothing (Just "gtk-quit")
-        quit Nothing ActionNormal (MPFirst ["File"]) TPNo []
-    ,AD "View" "_View" Nothing Nothing (return ()) Nothing ActionSubmenu (MPLast [] False) TPNo []
+    [AD "File" "_File" Nothing Nothing (return ()) Nothing ActionSubmenu
+            (Just $ MPFirst []) Nothing []
+    ,AD "Quit" "_Quit" Nothing (Just "gtk-quit") quit Nothing ActionNormal
+            (Just $ MPFirst ["File"]) Nothing []
+    ,AD "View" "_View" Nothing Nothing (return ()) Nothing ActionSubmenu
+            (Just $ MPLast [] False) Nothing []
     ,AD "ViewMoveLeft" "Move _Left" Nothing Nothing
-        (viewMove LeftP) (Just "<alt><shift>Left") ActionNormal (MPFirst ["View"]) TPNo [GS PaneActiveSens]
+            (viewMove LeftP) (Just "<alt><shift>Left") ActionNormal
+            (Just $ MPFirst ["View"]) Nothing [GS PaneActiveSens]
     ,AD "ViewMoveRight" "Move _Right" Nothing Nothing
-        (viewMove RightP) (Just "<alt><shift>Right") ActionNormal (MPAppend False) TPNo [GS PaneActiveSens]
+            (viewMove RightP) (Just "<alt><shift>Right") ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
     ,AD "ViewMoveUp" "Move _Up" Nothing Nothing
-        (viewMove TopP) (Just "<alt><shift>Up") ActionNormal (MPAppend False) TPNo [GS PaneActiveSens]
+            (viewMove TopP) (Just "<alt><shift>Up") ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
     ,AD "ViewMoveDown" "Move _Down" Nothing Nothing
-        (viewMove BottomP) (Just "<alt><shift>Down") ActionNormal (MPAppend False) TPNo [GS PaneActiveSens]
+            (viewMove BottomP) (Just "<alt><shift>Down") ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
     ,AD "ViewSplitHorizontal" "Split H_orizontal" Nothing Nothing
-        viewSplitHorizontal (Just "<ctrl>2") ActionNormal (MPAppend True) TPNo [GS PaneActiveSens]
+            viewSplitHorizontal (Just "<ctrl>2") ActionNormal
+            (Just $ MPAppend True) Nothing [GS PaneActiveSens]
     ,AD "ViewSplitVertical" "Split _Vertical" Nothing Nothing
-        viewSplitVertical (Just "<ctrl>3") ActionNormal (MPAppend False) TPNo [GS PaneActiveSens]
+            viewSplitVertical (Just "<ctrl>3") ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
     ,AD "ViewCollapse" "_Collapse" Nothing Nothing
-        viewCollapse (Just "<ctrl>1") ActionNormal (MPAppend False) TPNo [GS PaneActiveSens]
+            viewCollapse (Just "<ctrl>1") ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
     ,AD "ViewNest" "_Group" Nothing Nothing
-        viewNewGroup Nothing ActionNormal (MPAppend False) TPNo [GS PaneActiveSens]
---    ,AD "ViewDetach" "_Detach" Nothing Nothing
---        viewDetach [] ActionNormal
-
+            viewNewGroup Nothing ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
+    ,AD "ViewDetach" "_Detach" Nothing Nothing
+            viewDetachInstrumented Nothing ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
     ,AD "ViewTabsLeft" "Tabs Left" Nothing Nothing
-        (viewTabsPos PosLeft) (Just "<alt><shift><ctrl>Left") ActionNormal (MPAppend True) TPNo
-            [GS PaneActiveSens]
+            (viewTabsPos PosLeft) (Just "<alt><shift><ctrl>Left") ActionNormal
+            (Just $ MPAppend True) Nothing[GS PaneActiveSens]
     ,AD "ViewTabsRight" "Tabs Right" Nothing Nothing
-        (viewTabsPos PosRight) (Just "<alt><shift><ctrl>Right") ActionNormal (MPAppend False) TPNo
-            [GS PaneActiveSens]
+            (viewTabsPos PosRight) (Just "<alt><shift><ctrl>Right") ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
     ,AD "ViewTabsUp" "Tabs Up" Nothing Nothing
-        (viewTabsPos PosTop) (Just "<alt><shift><ctrl>Up") ActionNormal (MPAppend False) TPNo
-            [GS PaneActiveSens]
+        (viewTabsPos PosTop) (Just "<alt><shift><ctrl>Up") ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
     ,AD "ViewTabsDown" "Tabs Down" Nothing Nothing
-        (viewTabsPos PosBottom) (Just "<alt><shift><ctrl>Down") ActionNormal (MPAppend False) TPNo
-            [GS PaneActiveSens]
+        (viewTabsPos PosBottom) (Just "<alt><shift><ctrl>Down") ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
     ,AD "ViewSwitchTabs" "Tabs On/Off" Nothing Nothing
-        viewSwitchTabs (Just "<shift><ctrl>t") ActionNormal (MPAppend False) TPNo
-            [GS PaneActiveSens]
+        viewSwitchTabs (Just "<shift><ctrl>t") ActionNormal
+            (Just $ MPAppend False) Nothing [GS PaneActiveSens]
 
     ,AD "ViewClosePane" "Close pane" Nothing (Just "gtk-close")
-        viewClosePane (Just "<ctrl><shift>q") ActionNormal (MPAppend True) TPFirst
-            [GS PaneActiveSens]
+        viewClosePane (Just "<ctrl><shift>q") ActionNormal
+            (Just $ MPAppend True) (Just TPFirst) [GS PaneActiveSens]
 
 --    ,AD "ToggleToolbar" "Toggle Toolbar" Nothing Nothing
 --        toggleToolbar ["<ctrl>t"] False TODO
-
         ]
 
 --
@@ -135,8 +145,12 @@ startupFrame :: String -> (Window -> VBox -> Notebook -> StateAction) -> StateAc
 startupFrame windowName beforeMainGUI = trace "startupFrame*" $ do
     --    osxApp <- OSX.applicationNew
     uiManager <- getUiManagerSt
-    RegisterActions l <- triggerFrameEvent (RegisterActions frameActions)
-    (menuBar,toolbar)   <- initActions uiManager l
+    RegisterActions allActions       <- triggerFrameEvent (RegisterActions frameActions)
+    RegisterPane allPanes            <- triggerFrameEvent (RegisterPane [])
+    setPaneTypes allPanes
+    RegisterSessionExt sessionExt    <- triggerFrameEvent (RegisterSessionExt [])
+    setSessionExt sessionExt
+    (menuBar,toolbar)   <- initActions uiManager allActions
     setSensitivity [(PaneActiveSens, False)]
     reifyState $ \ stateR -> do
 
@@ -186,3 +200,17 @@ initGtkRc = rcParseString ("style \"leksah-close-button-style\"\n" ++
 #else
 initGtkRc = return ()
 #endif
+
+viewDetachInstrumented :: StateM ()
+viewDetachInstrumented = do
+    mbPair <- viewDetach
+    case mbPair of
+        Nothing     -> return ()
+        Just (win,wid) -> do
+            instrumentSecWindow win
+            liftIO $ widgetShowAll win
+
+-- TODO Menu, Toolbar, Key accelerators, Statusbar ??? for other windows
+instrumentSecWindow :: Window -> StateM ()
+instrumentSecWindow win = return ()
+

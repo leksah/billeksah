@@ -20,6 +20,8 @@ module Base.Event (
     makeEvent,
     getEvent,
     registerEvent,
+    registerEvent',
+    registerEvent'',
     triggerEvent,
     unionEvent,
     filterEvent,
@@ -133,6 +135,25 @@ registerEvent event handler = do
     return newEvtID
 
 --
+-- | Registers an event handler for this event, without returning a Value
+--
+registerEvent' :: PEvent alpha -> (alpha -> StateM ()) -> StateM (HandlerID)
+registerEvent' event handler = do
+    newEvtID         <- liftIO $ newUnique
+    (evtRegister event) (\ e -> handler e >> return e) newEvtID
+    return newEvtID
+
+--
+-- | Registers an event handler for this event, without returning a value and with a simple selector
+--   without args. The selector is not passed to the handler
+--
+registerEvent'' :: PEvent alpha -> alpha -> (StateM ()) -> StateM (HandlerID)
+registerEvent'' event selector handler = do
+    registerEvent' event (\ e -> case e of
+                                    selector      -> handler
+                                    _             -> return ())
+
+--
 -- | Triggers the event with the provided value
 --
 triggerEvent :: (Selector alpha, Typeable beta) => alpha  -> beta -> StateM beta
@@ -229,8 +250,6 @@ mkEvent ef@EventFactory{efGetHandlers = getHandlers, efSetHandlers = setHandlers
 
 getGEvent :: Selector alpha => alpha -> StateM GenEvent
 getGEvent key = getState key
-
-pluginEventPrefix = "billeksah-main.event"
 
 persistEvent :: (Selector alpha, Typeable beta) =>  alpha -> PEvent beta -> StateM ()
 persistEvent key event =

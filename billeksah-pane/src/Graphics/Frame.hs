@@ -6,6 +6,7 @@
     StandaloneDeriving,
     FlexibleInstances,
     ScopedTypeVariables,
+    FlexibleContexts,
     CPP#-}
 -----------------------------------------------------------------------------
 --
@@ -40,16 +41,44 @@ module Graphics.Frame (
 ,   viewClosePane
 ,   quit
 
+-- * Events
+,   FrameEvent(..)
+,   triggerFrameEvent
+,   getFrameEvent
+,   registerFrameEvent
+
     -- * Internals
 ,   getMainWindow
 ,   handleNotebookSwitch
 ,   newNotebook
-,   setWindowsSt
-,   initialFrameState
-,   registerFrameState
+,   viewSplit'
+,   paneDirectionToPosType
+,   viewDetach'
+,   viewNest'
+,   mbPaneFromName
+,   paneFromName
+,   posTypeToPaneDirection
+,   getNotebook
+,   getPaned
+,   viewCollapse'
+,   allGroupNames
+,   closeGroup
+,   GenPane(..)
 
     -- * Accesing state
+,   initialFrameState
+,   registerFrameState
 ,   getUiManagerSt
+,   getWindowsSt
+,   setWindowsSt
+,   getPanesSt
+,   getPaneMapSt
+,   getActivePaneSt
+,   getLayoutSt
+,   setPaneTypes
+,   getPaneTypes
+,   getSessionExt
+,   setSessionExt
 ) where
 
 import Base
@@ -88,13 +117,42 @@ import Debug.Trace (trace)
 -- trace a b = b
 
 
+-- ----------------------------------
+-- * Events
+--
+
+--
+-- | Events the gui frame triggers
+--
+data FrameEvent =
+      ActivatePane String
+    | DeactivatePane String
+    | MovePane String
+    | ChangeLayout
+    | RegisterActions [ActionDescr]
+    | RegisterPane [(String, GenPane)]
+    | RegisterSessionExt [GenSessionExtension]
+        deriving Typeable
+
+
+makeFrameEvent :: StateM(PEvent FrameEvent)
+makeFrameEvent = makeEvent FrameEventSel
+
+triggerFrameEvent :: FrameEvent -> StateM(FrameEvent)
+triggerFrameEvent          = triggerEvent FrameEventSel
+
+getFrameEvent :: StateM (PEvent FrameEvent)
+getFrameEvent              = getEvent FrameEventSel
+
+registerFrameEvent hdl = getFrameEvent >>= \ev -> registerEvent ev hdl
+
 --  ----------------------------------------
 --  * The main interface to the frame system
 
 --
 -- | All kinds of panes are instances of Pane
 --
-class PaneInterface alpha beta => Pane alpha beta where
+class PaneInterface alpha => Pane alpha where
 
     paneName        ::   alpha -> PaneName
     -- ^ gets a string which names this pane, which may include an added index ...
@@ -241,9 +299,11 @@ data FrameState = FrameState {
 ,   activePane      ::  Maybe (PaneName, Connections)
 ,   panePathFromNB  ::  Map Notebook PanePath
 ,   layout          ::  PaneLayout
-,   recentPanes     ::  [PaneName]}
-    deriving (Show,Typeable)
-
+,   recentPanes     ::  [PaneName]
+,   paneTypes       ::  [(String,GenPane)]     -- ^ The string is the paneType of the pane
+                                                -- the second arg encapsulates the real type
+,   sessionExt      ::  [GenSessionExtension]}
+    deriving Typeable
 --
 -- |  Empty initial frame state
 --
@@ -255,10 +315,12 @@ initialFrameState uim = FrameState {
 ,   activePane      =   Nothing
 ,   panePathFromNB  =   Map.empty
 ,   layout          =   initialLayout
-,   recentPanes     =   []}
+,   recentPanes     =   []
+,   paneTypes       =   []
+,   sessionExt      =   []}
 
 
-data GenPane        =   forall alpha beta. (Pane alpha beta) => PaneC alpha
+data GenPane        =   forall alpha beta.Pane alpha => PaneC alpha
 
 instance Eq GenPane where
     (==) (PaneC x) (PaneC y) = paneName x == paneName y
@@ -298,6 +360,10 @@ getPanePathFromNB  = getThis panePathFromNB
 setPanePathFromNB  = setThis (\st value -> st{panePathFromNB = value})
 getRecentPanes  = getThis recentPanes
 setRecentPanes  = setThis (\st value -> st{recentPanes = value})
+getPaneTypes    = getThis paneTypes
+setPaneTypes    = setThis (\st value -> st{paneTypes = value})
+getSessionExt   = getThis sessionExt
+setSessionExt   = setThis (\st value -> st{sessionExt = value})
 
 --
 -- | The handling of the state of the frame
@@ -342,7 +408,7 @@ deactivatePaneWithoutEvents = do
         Nothing -> return ()
     setActivePaneSt Nothing
 
-deactivatePaneIfActive :: Pane alpha beta => alpha -> StateAction
+deactivatePaneIfActive :: Pane alpha => alpha -> StateAction
 deactivatePaneIfActive pane = do
     mbActive <- getActivePaneSt
     case mbActive of
@@ -352,7 +418,7 @@ deactivatePaneIfActive pane = do
                         else return ()
 
 
-addPaneAdmin :: Pane alpha beta => alpha -> Connections -> PanePath -> StateM Bool
+addPaneAdmin :: Pane alpha => alpha -> Connections -> PanePath -> StateM Bool
 addPaneAdmin pane conn pp = do
     panes'          <-  getPanesSt
     paneMap'        <-  getPaneMapSt
@@ -466,7 +532,7 @@ mainWindowName = do
 --
 -- | Bring the pane to the front position in its notebook
 --
-bringPaneToFront :: Pane alpha beta => alpha -> IO ()
+bringPaneToFront :: Pane alpha => alpha -> IO ()
 bringPaneToFront pane = do
     let tv = getTopWidget pane
     setCurrentNotebookPages tv
@@ -746,7 +812,7 @@ removeGL (SplitP RightP:r)  (VerticalP lp rp _)     = VerticalP lp (removeGL r r
 removeGL p l = error $"ViewFrame>>removeGL: inconsistent layout " ++ show p ++ " " ++ show l
 
 
-removePaneAdmin :: Pane alpha beta =>  alpha -> StateM ()
+removePaneAdmin :: Pane alpha =>  alpha -> StateM ()
 removePaneAdmin pane = do
     panes'          <-  getPanesSt
     paneMap'        <-  getPaneMapSt
@@ -754,14 +820,14 @@ removePaneAdmin pane = do
     setPaneMapSt    (Map.delete (paneName pane) paneMap')
 
 
-getPanePrim ::  Typeable alpha => Pane alpha beta => StateM (Maybe alpha)
+getPanePrim ::  Typeable alpha => Pane alpha => StateM (Maybe alpha)
 getPanePrim = do
     selectedPanes <- getPanes
     if null selectedPanes || length selectedPanes > 1
         then return Nothing
         else (return (Just $ head selectedPanes))
 
-getPanes ::  Typeable alpha => Pane alpha beta => StateM ([alpha])
+getPanes ::  Typeable alpha => Pane alpha => StateM ([alpha])
 getPanes = do
     panes' <- getPanesSt
     return (catMaybes
@@ -1091,8 +1157,6 @@ bringGroupToFront groupName = do
 
 --  Yet another stupid little dialog
 
-groupNameDialog = undefined -- TODO
-{--
 groupNameDialog :: Window -> IO (Maybe String)
 groupNameDialog parent =  liftIO $ do
     dia                        <-   dialogNew
@@ -1100,32 +1164,32 @@ groupNameDialog parent =  liftIO $ do
     windowSetTitle dia "Enter group name"
     upper                      <-   dialogGetUpper dia
     lower                      <-   dialogGetActionArea dia
-    (widget,inj,ext,_)         <-   buildEditor moduleFields ""
-    (widget2,_,_,notifier)     <-   buildEditor okCancelFields ()
-    registerEvent notifier ButtonPressed (\e -> do
-            case eventText e of
-                "Ok"    ->  dialogResponse dia ResponseOk
-                _       ->  dialogResponse dia ResponseCancel
-            return e)
-    boxPackStart upper widget PackGrow 7
-    boxPackStart lower widget2 PackNatural 7
+
+    buttonBox                  <-   hButtonBoxNew
+    okButton                   <-   buttonNewFromStock "gtk-ok"
+    cancelButton               <-   buttonNewFromStock "gtk-cancel"
+    onClicked okButton (dialogResponse dia ResponseOk)
+    onClicked cancelButton (dialogResponse dia ResponseCancel)
+    boxPackStartDefaults buttonBox cancelButton
+    boxPackStartDefaults buttonBox okButton
+    boxPackStart lower buttonBox PackNatural 7
+    dialogSetDefaultResponse dia ResponseOk
+
+    label                      <-   labelNew (Just "Group Name")
+    textField                  <-   entryNew
+--    entrySetActivatesDefault textField True
+    windowSetDefault dia (Just okButton)
+    boxPackStartDefaults upper label
+    boxPackStartDefaults upper textField
+
+
     widgetShowAll dia
-    resp <- dialogRun dia
-    value                      <- ext ("")
+    resp  <- dialogRun dia
+    value <- entryGetText textField
     widgetDestroy dia
     case resp of
-        ResponseOk | value /= Just ""  -> return value
+        ResponseOk | value /= ""       -> return (Just value)
         _                             -> return Nothing
-    where
-        moduleFields :: FieldDescription String
-        moduleFields = VFD emptyParams [
-                mkField
-                    (paraName <<<- ParaName ("New group ")
-                            $ emptyParams)
-                    id
-                    (\ a b -> a)
-            (stringEditor (const True) True)]
---}
 
 viewNest ::  String -> StateM ()
 viewNest group = do
@@ -1295,7 +1359,7 @@ findMoveTarget panePath layout direction=
 --
 -- | Moves the given Pane to the given path
 --
-move ::  Pane alpha beta => PanePath -> alpha -> StateM ()
+move ::  Pane alpha => PanePath -> alpha -> StateM ()
 move toPanePath pane = do
     let name    = paneName pane
     toNB        <- (getNotebook' "move") toPanePath

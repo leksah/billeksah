@@ -6,7 +6,12 @@
     CPP,
     DeriveDataTypeable,
     EmptyDataDecls,
-    StandaloneDeriving #-}
+    StandaloneDeriving,
+    TypeFamilies,
+    FlexibleContexts,
+    ScopedTypeVariables,
+    RankNTypes,
+    FlexibleInstances #-}
    -- TypeFamilies
 -----------------------------------------------------------------------------
 --
@@ -35,8 +40,8 @@ module Graphics.Panes (
 ,   Connections
 ,   PaneInterface(..)
 
+-- * Other
 ,   signalDisconnectAll
-,   runInIO
 
 ,   panePathForGroup
 ,   initialLayout
@@ -46,11 +51,8 @@ module Graphics.Panes (
 
 ) where
 
-import Base.State
-
-import Base.Event
-import Base.MyMissing
-import Base.PluginTypes
+import Base
+import Graphics.FrameTypes
 
 import Graphics.UI.Gtk hiding (get)
 import System.Glib.GObject
@@ -122,28 +124,33 @@ initialLayout = TerminalP {
 
 type PaneName = String
 
+
 --
 -- | The class which describes the minimal implementation
 --
-class (Typeable alpha, Show beta, Read beta) => PaneInterface alpha beta  | beta  -> alpha, alpha -> beta   where
+class (Typeable alpha, Show (PaneState alpha), Read (PaneState alpha)) => PaneInterface alpha where
 
-    getTopWidget    ::   alpha -> Widget
-    -- ^ gets the top Widget of this pane
+    data PaneState alpha :: *
 
     primPaneName    ::   alpha -> String
     -- ^ gets a string which names this pane
 
-    paneId          ::   alpha -> String
-    -- ^ gets a unique id for this pane
-
-    saveState       ::   alpha -> StateM (Maybe beta)
-    -- ^ Returns the state of this pane
-
-    recoverState    ::   PanePath -> beta -> StateM (Maybe alpha)
-    -- ^ Sets the state for this pane
+    paneType          :: alpha -> String
+    -- ^ gets a unique id for this type of pane
 
     builder         ::   PanePath -> Notebook -> Window -> StateM (Maybe alpha,Connections)
     -- ^ A function, which builds this pane
+
+    getTopWidget    ::   alpha -> Widget
+    -- ^ gets the top Widget of this pane
+
+    saveState       ::   alpha -> StateM (Maybe (PaneState alpha))
+    -- ^ Returns the state of this pane
+
+    recoverState    ::   PanePath -> PaneState alpha -> StateM (Maybe alpha)
+    -- ^ Sets the state for this pane
+
+
 
 --
 -- | Signal handlers for the different pane types
