@@ -61,7 +61,9 @@ frameInit1 baseEvent myEvent = trace ("init1 " ++ panePluginName) $ do
 frameInit2 :: BaseEvent -> PEvent FrameEvent -> StateM ()
 frameInit2 baseEvent myEvent = trace ("init2 " ++ panePluginName) $ do
     uiManager <- liftIO $ do
-        unsafeInitGUIForThreadedRTS
+--        res <- unsafeInitGUIForThreadedRTS
+        res <- initGUI
+        putStrLn ("initGUI " ++ show res)
         uiManagerNew
     liftIO $ initGtkRc
     res <- registerFrameState (initialFrameState uiManager)
