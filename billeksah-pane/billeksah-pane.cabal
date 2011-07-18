@@ -24,6 +24,7 @@ Library
         Graphics.Pane
         Graphics.Menu
         Graphics.Session
+        Graphics.Statusbar
     exposed: True
     buildable: True
     hs-source-dirs: src

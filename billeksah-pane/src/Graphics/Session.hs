@@ -25,6 +25,7 @@ import Base
 import Graphics.Panes
 import Graphics.Frame
 import Graphics.FrameTypes
+import Graphics.Menu
 
 import Control.Monad.IO.Class (MonadIO(..))
 import Graphics.UI.Gtk
@@ -59,12 +60,14 @@ saveSession = do
         timeNow         <- liftIO getCurrentTime
         timeZone        <- liftIO $ getTimeZone timeNow
         extensions      <- getSessionExtensions
+        tbv             <- toolbarVisible
         let state = SessionState {
             ssSaveTime            =   show $ utcToLocalTime timeZone timeNow
         ,   ssLayout              =   layout
         ,   ssPopulation          =   population
         ,   ssWindowSize          =   size
         ,   ssActivePane          =   activeP
+        ,   ssToolbarVisible      =   tbv
         ,   ssExtensions          =   extensions}
         return(showFields state sessionDescr)
 
@@ -90,6 +93,7 @@ data SessionState = SessionState {
     ,   ssPopulation          ::   [(String,Maybe String,PanePath)]
     ,   ssWindowSize          ::   (Int,Int)
     ,   ssActivePane          ::   Maybe String
+    ,   ssToolbarVisible      ::   Bool
     ,   ssExtensions          ::   [(String,String)]
 }
 
@@ -100,6 +104,7 @@ defaultSession = SessionState {
     ,   ssPopulation          =   []
     ,   ssWindowSize          =   (1024,768)
     ,   ssActivePane          =   Nothing
+    ,   ssToolbarVisible      =   True
     ,   ssExtensions          =   []
 }
 
@@ -133,6 +138,20 @@ sessionDescr = [
             (pairParser intParser)
             ssWindowSize
             (\(c,d) a -> a{ssWindowSize = (c,d)})
+    ,   mkFieldS
+            "Maybe active pane"
+            Nothing
+            (PP.text . show)
+            readParser
+            ssActivePane
+            (\ b a -> a{ssActivePane = b})
+    ,   mkFieldS
+            "Toolbar visible"
+            Nothing
+            (PP.text . show)
+            readParser
+            ssToolbarVisible
+            (\ b a -> a{ssToolbarVisible = b})
     ,   mkFieldS
             "Extensions"
             Nothing
@@ -246,6 +265,7 @@ recoverSession' sessionString = catchState (do
         case mbPane of
             Nothing -> return ()
             Just (PaneC p) -> makeActive p []
+    showToolbar (ssToolbarVisible sessionSt)
     extensions      <- getSessionExt
     applyExtensions extensions (ssExtensions sessionSt)
     return Nothing)

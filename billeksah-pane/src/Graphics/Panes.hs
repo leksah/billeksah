@@ -74,6 +74,8 @@ import Data.Version (Version(..))
 -- * Panes and pane layout
 --
 
+type PaneName = String
+
 --
 -- | The direction of a split
 --
@@ -122,7 +124,6 @@ initialLayout = TerminalP {
 ,   detachedSize = Nothing}
 
 
-type PaneName = String
 
 
 --
@@ -134,6 +135,7 @@ class (Typeable alpha, Show (PaneState alpha), Read (PaneState alpha)) => PaneIn
 
     primPaneName    ::   alpha -> String
     -- ^ gets a string which names this pane
+
 
     paneType          :: alpha -> String
     -- ^ gets a unique id for this type of pane
@@ -188,6 +190,8 @@ postSyncState f = reifyState (\ideR -> postGUISync (reflectState f ideR))
 --
 postAsyncState :: StateM () -> StateM ()
 postAsyncState f = reifyState (\ideR -> postGUIAsync (reflectState f ideR))
+
+
 
 --  ----------------------------------------
 -- * Necessary with pre 10.1 verion of gtk2hs

@@ -17,10 +17,11 @@ module Base.MyMissing (
     allOf
 ,   forceJust
 ,   forceHead
-,   split
+,   splitString
 ,   replace
 ,   nonEmptyLines
 ,   trim
+,   insertAt
 ) where
 
 import Data.List (find,unfoldr)
@@ -60,8 +61,8 @@ forceHead [] str = error str
 -- Splitting a string into parts based on a token delimiter
 --
 
-split :: Eq a => a -> [a] -> [[a]]
-split =  unfoldr . split'
+splitString :: Eq a => a -> [a] -> [[a]]
+splitString =  unfoldr . split'
 
 split' :: Eq a => a -> [a] -> Maybe ([a], [a])
 split' c l
@@ -80,4 +81,13 @@ replace from to xs@(a:as) =
         then to ++ replace from to (drop (length from) xs)
         else a : replace from to as
     where isPrefixOf as bs = and $ zipWith (== ) as bs
+
+-- ---------------------------------------------------------------------
+-- Insert in a list at index
+--
+insertAt :: Int -> a -> [a] -> [a]
+insertAt i e l | i < 0        = e : l
+               | i >= length l = l ++ [e]
+               | otherwise    = let (start,end) = splitAt i l
+                                in start ++ (e : end)
 

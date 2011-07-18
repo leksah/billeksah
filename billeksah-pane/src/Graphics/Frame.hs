@@ -72,13 +72,26 @@ module Graphics.Frame (
 ,   getWindowsSt
 ,   setWindowsSt
 ,   getPanesSt
+,   setPanesSt
 ,   getPaneMapSt
+,   setPaneMapSt
 ,   getActivePaneSt
+,   setActivePaneSt
 ,   getLayoutSt
+,   setLayoutSt
 ,   setPaneTypes
 ,   getPaneTypes
 ,   getSessionExt
 ,   setSessionExt
+,   getToolbar
+,   setToolbar
+,   getStatusbar
+,   setStatusbar
+,   getPanePathFromNB
+,   setPanePathFromNB
+,   getRecentPanes
+,   setRecentPanes
+
 ) where
 
 import Base
@@ -132,8 +145,8 @@ data FrameEvent =
     | RegisterActions [ActionDescr]
     | RegisterPane [(String, GenPane)]
     | RegisterSessionExt [GenSessionExtension]
+    | RegisterStatusbarComp [CompDescr]
         deriving Typeable
-
 
 makeFrameEvent :: StateM(PEvent FrameEvent)
 makeFrameEvent = makeEvent FrameEventSel
@@ -145,6 +158,112 @@ getFrameEvent :: StateM (PEvent FrameEvent)
 getFrameEvent              = getEvent FrameEventSel
 
 registerFrameEvent hdl = getFrameEvent >>= \ev -> registerEvent ev hdl
+
+-- ------------------------------------
+-- * The state connected with frames
+--
+
+-- | Shows the state for the implementation of the GUI Frame
+--
+data FrameState = FrameState {
+    fsUiManager       ::  UIManager
+,   fsWindows         ::  [Window]
+,   fsPanes           ::  Map PaneName GenPane
+,   fsPaneMap         ::  (Map PaneName (PanePath, Connections))
+,   fsActivePane      ::  Maybe (PaneName, Connections)
+,   fsPanePathFromNB  ::  Map Notebook PanePath
+,   fsLayout          ::  PaneLayout
+,   fsRecentPanes     ::  [PaneName]
+,   fsPaneTypes       ::  [(String,GenPane)]     -- ^ The string is the paneType of the pane
+                                                -- the second arg encapsulates the real type
+,   fsSessionExt      ::  [GenSessionExtension]
+,   fsToolbar         ::  (Maybe Toolbar)
+,   fsStatusbar       ::  (Map CompName CompWidget, Maybe HBox)}
+    deriving Typeable
+--
+-- |  Empty initial frame state
+--
+initialFrameState uim = FrameState {
+    fsUiManager       =   uim
+,   fsWindows         =   []
+,   fsPanes           =   Map.empty
+,   fsPaneMap         =   Map.empty
+,   fsActivePane      =   Nothing
+,   fsPanePathFromNB  =   Map.empty
+,   fsLayout          =   initialLayout
+,   fsRecentPanes     =   []
+,   fsPaneTypes       =   []
+,   fsSessionExt      =   []
+,   fsToolbar         =   (Nothing)
+,   fsStatusbar       =   (Map.empty,Nothing)}
+
+
+data GenPane        =   forall alpha . Pane alpha  => PaneC alpha
+
+instance Eq GenPane where
+    (==) (PaneC x) (PaneC y) = paneName x == paneName y
+
+instance Ord GenPane where
+    (<=) (PaneC x) (PaneC y) = paneName x <=  paneName y
+
+instance Show GenPane where
+    show (PaneC x)    = "Pane " ++ paneName x
+
+-- ---------------------------------------------------------------------
+-- * Accessor functions
+--
+
+getThis :: (FrameState -> alpha) -> StateM alpha
+getThis sel = do
+    st <- getFrameState
+    return (sel st)
+
+setThis :: (FrameState -> alpha -> FrameState) -> alpha -> StateM ()
+setThis sel value = do
+    st <- getFrameState
+    setFrameState (sel st value)
+
+getWindowsSt    = getThis fsWindows
+setWindowsSt    = setThis (\st value -> st{fsWindows = value})
+getUiManagerSt  = getThis fsUiManager
+getPanesSt      = getThis fsPanes
+setPanesSt      = setThis (\st value -> st{fsPanes = value})
+getPaneMapSt    = getThis fsPaneMap
+setPaneMapSt    = setThis (\st value -> st{fsPaneMap = value})
+getActivePaneSt = getThis fsActivePane
+setActivePaneSt = setThis (\st value -> st{fsActivePane = value})
+getLayoutSt     = getThis fsLayout
+setLayoutSt     = setThis (\st value -> st{fsLayout = value})
+getPanePathFromNB  = getThis fsPanePathFromNB
+setPanePathFromNB  = setThis (\st value -> st{fsPanePathFromNB = value})
+getRecentPanes  = getThis fsRecentPanes
+setRecentPanes  = setThis (\st value -> st{fsRecentPanes = value})
+getPaneTypes    = getThis fsPaneTypes
+setPaneTypes    = setThis (\st value -> st{fsPaneTypes = value})
+getSessionExt   = getThis fsSessionExt
+setSessionExt   = setThis (\st value -> st{fsSessionExt = value})
+getToolbar      = getThis fsToolbar
+setToolbar      = setThis (\st value -> st{fsToolbar = value})
+getStatusbar    = getThis fsStatusbar
+setStatusbar    = setThis (\st value -> st{fsStatusbar = value})
+
+
+--
+-- | The handling of the state of the frame
+--
+
+registerFrameState :: FrameState -> StateM (Maybe String)
+registerFrameState = registerState FrameStateSel
+
+setFrameState :: FrameState -> StateM ()
+setFrameState      = setState FrameStateSel
+
+getFrameState :: StateM (FrameState)
+getFrameState      = getState FrameStateSel
+
+-- | Quit ide -- TODO
+quit :: StateAction
+quit = liftIO mainQuit
 
 --  ----------------------------------------
 --  * The main interface to the frame system
@@ -285,102 +404,6 @@ class PaneInterface alpha => Pane alpha where
 
 
 
--- ------------------------------------
--- * The state connected with frames
---
-
--- | Shows the state for the implementation of the GUI Frame
---
-data FrameState = FrameState {
-    uiManager       ::  UIManager
-,   windows         ::  [Window]
-,   panes           ::  Map PaneName GenPane
-,   paneMap         ::  (Map PaneName (PanePath, Connections))
-,   activePane      ::  Maybe (PaneName, Connections)
-,   panePathFromNB  ::  Map Notebook PanePath
-,   layout          ::  PaneLayout
-,   recentPanes     ::  [PaneName]
-,   paneTypes       ::  [(String,GenPane)]     -- ^ The string is the paneType of the pane
-                                                -- the second arg encapsulates the real type
-,   sessionExt      ::  [GenSessionExtension]}
-    deriving Typeable
---
--- |  Empty initial frame state
---
-initialFrameState uim = FrameState {
-    uiManager       =   uim
-,   windows         =   []
-,   panes           =   Map.empty
-,   paneMap         =   Map.empty
-,   activePane      =   Nothing
-,   panePathFromNB  =   Map.empty
-,   layout          =   initialLayout
-,   recentPanes     =   []
-,   paneTypes       =   []
-,   sessionExt      =   []}
-
-
-data GenPane        =   forall alpha beta.Pane alpha => PaneC alpha
-
-instance Eq GenPane where
-    (==) (PaneC x) (PaneC y) = paneName x == paneName y
-
-instance Ord GenPane where
-    (<=) (PaneC x) (PaneC y) = paneName x <=  paneName y
-
-instance Show GenPane where
-    show (PaneC x)    = "Pane " ++ paneName x
-
--- ---------------------------------------------------------------------
--- * Accessor functions
---
-
-getThis :: (FrameState -> alpha) -> StateM alpha
-getThis sel = do
-    st <- getFrameState
-    return (sel st)
-
-setThis :: (FrameState -> alpha -> FrameState) -> alpha -> StateM ()
-setThis sel value = do
-    st <- getFrameState
-    setFrameState (sel st value)
-
-getWindowsSt    = getThis windows
-setWindowsSt    = setThis (\st value -> st{windows = value})
-getUiManagerSt  = getThis uiManager
-getPanesSt      = getThis panes
-setPanesSt      = setThis (\st value -> st{panes = value})
-getPaneMapSt    = getThis paneMap
-setPaneMapSt    = setThis (\st value -> st{paneMap = value})
-getActivePaneSt = getThis activePane
-setActivePaneSt = setThis (\st value -> st{activePane = value})
-getLayoutSt     = getThis layout
-setLayoutSt     = setThis (\st value -> st{layout = value})
-getPanePathFromNB  = getThis panePathFromNB
-setPanePathFromNB  = setThis (\st value -> st{panePathFromNB = value})
-getRecentPanes  = getThis recentPanes
-setRecentPanes  = setThis (\st value -> st{recentPanes = value})
-getPaneTypes    = getThis paneTypes
-setPaneTypes    = setThis (\st value -> st{paneTypes = value})
-getSessionExt   = getThis sessionExt
-setSessionExt   = setThis (\st value -> st{sessionExt = value})
-
---
--- | The handling of the state of the frame
---
-
-registerFrameState :: FrameState -> StateM (Maybe String)
-registerFrameState = registerState FrameStateSel
-
-setFrameState :: FrameState -> StateM ()
-setFrameState      = setState FrameStateSel
-
-getFrameState :: StateM (FrameState)
-getFrameState      = getState FrameStateSel
-
--- | Quit ide -- TODO
-quit :: StateAction
-quit = liftIO mainQuit
 
 -- ---------------------------------------------------------------------
 -- Activating and deactivating Panes.
@@ -953,8 +976,8 @@ viewSplit' panePath dir = do
                                                                         panePath ++ [SplitP LeftP],
                                                                         panePath ++ [SplitP RightP])
                             adjustNotebooks panePath oldPath
-                            frameState  <- getFrameState
-                            setPanePathFromNB $ Map.insert activeNotebook oldPath (panePathFromNB frameState)
+                            ppNb <- getPanePathFromNB
+                            setPanePathFromNB $ Map.insert activeNotebook oldPath ppNb
                             nb  <- newNotebook newPath
                             (np,nbi) <- liftIO $ do
                                 newpane <- case dir of
@@ -1063,8 +1086,8 @@ viewCollapse' panePath = trace "viewCollapse' called" $ do
                                                         getGroupsFrom otherSidePath layout1
                             mapM_ (\n -> move' (n,activeNotebook)) groupNames
                             -- 2. Remove unused notebook from admin
-                            st <- getFrameState
-                            let ! newMap = Map.delete otherSideNotebook (panePathFromNB st)
+                            ppNb <- getPanePathFromNB
+                            let ! newMap = Map.delete otherSideNotebook ppNb
                             setPanePathFromNB newMap
                             -- 3. Remove one level and reparent notebook
                             mbParent <- liftIO $ widgetGetParent activeNotebook
@@ -1373,7 +1396,6 @@ move' (paneName,toNB) = do
     paneMap         <-  getPaneMapSt
     panes           <-  getPanesSt
     layout          <-  getLayoutSt
-    frameState      <-  getFrameState
     case groupPrefix `stripPrefix` paneName of
         Just group  -> do
             case findGroupPath group layout of
@@ -1381,7 +1403,8 @@ move' (paneName,toNB) = do
                 Just fromPath -> do
                     groupNBOrPaned <- getNotebookOrPaned fromPath castToWidget
                     fromNB  <- (getNotebook' "move'") (init fromPath)
-                    case toNB `Map.lookup` (panePathFromNB frameState) of
+                    ppNb <- getPanePathFromNB
+                    case toNB `Map.lookup` ppNb of
                         Nothing -> trace "ViewFrame>>move': panepath for Notebook not found1" return ()
                         Just toPath -> do
                             when (fromNB /= toNB && not (isPrefixOf fromPath toPath)) $ do
@@ -1402,7 +1425,8 @@ move' (paneName,toNB) = do
             case paneName `Map.lookup` panes of
                 Nothing -> trace ("ViewFrame>>move': pane not found: " ++ paneName) return ()
                 Just (PaneC pane) -> do
-                    case toNB `Map.lookup` (panePathFromNB frameState) of
+                    ppNb <- getPanePathFromNB
+                    case toNB `Map.lookup` ppNb of
                         Nothing -> trace "ViewFrame>>move': panepath for Notebook not found2" return ()
                         Just toPath ->
                             case paneName `Map.lookup`paneMap of
@@ -1451,9 +1475,9 @@ newNotebook' = do
 --
 newNotebook :: PanePath -> StateM Notebook
 newNotebook pp = do
-    st  <- getFrameState
     nb  <- liftIO newNotebook'
-    setPanePathFromNB $ Map.insert nb pp (panePathFromNB st)
+    ppNb <- getPanePathFromNB
+    setPanePathFromNB $ Map.insert nb pp ppNb
     func <- runInIO move'
     liftIO $ do
         tl <- targetListNew

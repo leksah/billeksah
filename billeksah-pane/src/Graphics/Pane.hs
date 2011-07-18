@@ -29,12 +29,14 @@ import Graphics.Frame
 import Graphics.Panes
 import Graphics.Menu
 import Graphics.Session
+import Graphics.Statusbar
 
 import Graphics.UI.Gtk
 import Debug.Trace (trace)
 import Data.Version (Version(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Concurrent (yield)
+import Control.Monad (when)
 
 -- -----------------------------------------------------------
 -- * It's a plugin
@@ -72,8 +74,10 @@ frameInit2 baseEvent myEvent = trace ("init2 " ++ panePluginName) $ do
         Just s -> (evtTrigger baseEvent) (BaseError s) >> return ()
     getFrameEvent >>= \e -> registerEvent' e
         (\s -> case s of
-            ActivatePane _   -> setSensitivity [(PaneActiveSens, True)]
-            DeactivatePane _ -> setSensitivity [(PaneActiveSens, False)]
+            ActivatePane pn  -> do  setSensitivity [(PaneActiveSens, True)]
+                                    setStatusText "SBActivePane" pn
+            DeactivatePane _ -> do  setSensitivity [(PaneActiveSens, False)]
+                                    setStatusText "SBActivePane" ""
             _                -> return ())
     return ()
 
@@ -136,9 +140,13 @@ frameActions =
         viewClosePane (Just "<ctrl><shift>q") ActionNormal
             (Just $ MPAppend True) (Just TPFirst) [GS PaneActiveSens]
 
---    ,AD "ToggleToolbar" "Toggle Toolbar" Nothing Nothing
---        toggleToolbar ["<ctrl>t"] False TODO
+    ,AD "ToolbarVisible" "Toolbar visible" Nothing Nothing
+        toggleToolbar (Just "<alt><shift>t") ActionToggle (Just $ MPAppend True) Nothing []
         ]
+
+frameCompartments = [
+    TextCompDescr "SBActions" False 150 PackGrow CPLast,
+    TextCompDescr "SBActivePane" False 150 PackGrow CPLast]
 
 --
 -- | Opens up the main window, with menu, toolbar, accelerators
@@ -154,6 +162,11 @@ startupFrame windowName beforeMainGUI = trace "startupFrame*" $ do
     setSessionExt sessionExt
     (menuBar,toolbar)   <- initActions uiManager allActions
     setSensitivity [(PaneActiveSens, False)]
+    tbv <- toolbarVisible
+    setToolbar (Just toolbar)
+    showToolbar True
+    RegisterStatusbarComp allCompartments <- triggerFrameEvent (RegisterStatusbarComp frameCompartments)
+    statusbar <- buildStatusbar allCompartments
     reifyState $ \ stateR -> do
 
         win         <-  trace "1" $ windowNew
@@ -179,9 +192,11 @@ startupFrame windowName beforeMainGUI = trace "startupFrame*" $ do
         win `onDelete` (\ _ -> do reflectState quit stateR; return True)
         boxPackStart vb nb PackGrow 0
 
-        reflectState (beforeMainGUI win vb nb) stateR
+        boxPackEnd vb statusbar PackNatural 0
+
         widgetShowAll win
         timeoutAddFull (yield >> return True) priorityDefaultIdle 100 -- maybe switch back to
+        reflectState (beforeMainGUI win vb nb) stateR
 
         mainGUI
         return ()

@@ -1,5 +1,4 @@
-{-# Language DeriveDataTypeable, StandaloneDeriving, ExistentialQuantification,
-    RankNTypes, ScopedTypeVariables #-}
+-- {-# Language  #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Menu
@@ -18,13 +17,18 @@ module Graphics.Menu (
     initActions,
     setSensitivity,
     registerActionState,
-    initialActionState
+    initialActionState,
+
+    toggleToolbar,
+    showToolbar,
+    toolbarVisible
 )where
 
 import Base
 import Graphics.FrameTypes
 import Graphics.Frame
 import Graphics.Panes
+import Graphics.Statusbar
 
 
 import Data.Version (Version(..))
@@ -40,10 +44,9 @@ import Data.Maybe (fromJust, mapMaybe, catMaybes)
 
 
 
+-----------------------------------------
+-- * The handling of the state of the frame
 --
--- | The handling of the state of the frame
---
-
 type ActionState = Map GenSelector [String]
 
 registerActionState :: ActionState -> StateM (Maybe String)
@@ -58,8 +61,9 @@ getActionState      = getState ActionStateSel
 initialActionState = Map.empty
 
 --------------------------------------------------------------
--- * MenuBar state
+-- * Actions
 
+--
 -- | * Builds the menu and toolbar from the action description,
 --     and registers accelerators from the action descriptions
 initActions :: UIManager -> [ActionDescr] -> StateM (MenuBar,Toolbar)
@@ -96,7 +100,9 @@ buildAction uiManager accGroup actionGroup toolBar mb lastPosition actionDescr =
             act <- actionNew (adName actionDescr)
                 (adLabel actionDescr) (adSynopsis actionDescr) (adStockID actionDescr)
             actionSetAccelGroup act accGroup
-            onActionActivate act (reflectState (adAction actionDescr) stateR)
+            onActionActivate act (reflectState (do
+                adAction actionDescr
+                setStatusText "SBActions" accString) stateR)
             actionGroupAddActionWithAccel actionGroup act acc
             fst <- buildMenuItem uiManager mb (Just act) actionDescr (fst lastPosition)
             snd <- buildToolItem uiManager toolBar (Just act) actionDescr (snd lastPosition)
@@ -105,13 +111,16 @@ buildAction uiManager accGroup actionGroup toolBar mb lastPosition actionDescr =
             act <- toggleActionNew (adName actionDescr)
                 (adLabel actionDescr) (adSynopsis actionDescr) (adStockID actionDescr)
             actionSetAccelGroup act accGroup
-            on act actionToggled (reflectState (adAction actionDescr) stateR)
+            on act actionToggled (reflectState (do
+                adAction actionDescr
+                setStatusText "SBActions" accString) stateR)
             actionGroupAddActionWithAccel actionGroup act acc
             fst <- buildMenuItem uiManager mb (Just act) actionDescr (fst lastPosition)
             snd <- buildToolItem uiManager toolBar (Just act) actionDescr (snd lastPosition)
             return (fst,snd)
 
-
+--------------------------------------------------------------
+-- * Menus
 
 buildMenuItem :: ActionClass alpha => UIManager -> MenuBar -> Maybe alpha -> ActionDescr
                     -> Maybe (MenuShell,Int) -> IO (Maybe (MenuShell,Int))
@@ -174,43 +183,6 @@ mkMenuItem (Just action) AD{adActionType = actionType}
     | actionType == ActionNormal || actionType == ActionToggle  = do
         menuItem <- actionCreateMenuItem action
         return (castToMenuItem menuItem)
-
-buildToolItem :: ActionClass alpha => UIManager -> Toolbar -> Maybe alpha -> ActionDescr
-                    -> Maybe Int -> IO (Maybe Int)
-buildToolItem uiManager tig Nothing ad@AD{adToolbar = toolPos, adName = name} mbLast
-                     = return mbLast
-buildToolItem uiManager tb (Just action) ad@AD{adToolbar = toolPos, adName = name} mbLast
-    | toolPos == Nothing = return mbLast
-    | otherwise      = do
-        toolItem <- liftM castToToolItem (actionCreateToolItem action)
-        res <- getToolInsertion tb (fromJust toolPos)
-        case res of
-            Nothing -> error ("Menu>>buildToolItem: No valid position for: " ++ adName ad)
-            Just (InsertTool ind True) -> do
-                        sep <- separatorToolItemNew
-                        toolbarInsert tb sep ind
-                        toolbarInsert tb toolItem (ind + 1)
-                        return (Just (ind + 2))
-            Just (InsertTool ind False) -> do
-                        toolbarInsert tb toolItem ind
-                        return (Just (ind + 1))
-            Just (AfterLastTool True) -> do
-                        case mbLast of
-                            Nothing ->  error $ "Menu>>buildToolItem: No last insertion for: "
-                                                    ++ adName ad
-                            Just ind -> do
-                                toolbarInsert tb toolItem ind
-                                return (Just (ind + 1))
-            Just (AfterLastTool False) -> do
-                        case mbLast of
-                            Nothing ->  error $ "Menu>>buildToolItem: No last insertion for: "
-                                                    ++ adName ad
-                            Just ind -> do
-                                sep <- separatorToolItemNew
-                                toolbarInsert tb sep ind
-                                toolbarInsert tb toolItem (ind + 1)
-                                return (Just (ind + 2))
-
 data MenuPos = Prepend MenuShell  | Append MenuShell Bool  | Insert Int MenuShell Bool
                 | AfterLast Bool
 
@@ -256,32 +228,6 @@ getInsertion mb (MPOr mp1 mp2)      = do
                                             Just t -> return (Just t)
                                             Nothing -> getInsertion mb mp2
 
-data ToolPos = InsertTool Int Bool | AfterLastTool Bool
-
-
-getToolInsertion :: Toolbar ->  ToolPosition -> IO (Maybe ToolPos)
-getToolInsertion tb TPFirst             = return $ Just (InsertTool 0 False)
-getToolInsertion tb (TPLast sep)        = do
-                                            n <- toolbarGetNItems tb
-                                            return $ Just (InsertTool n sep)
-getToolInsertion tb (TPAfter str sep)   = do
-                                            mbIndex <- getToolIndexForName tb str
-                                            case mbIndex of
-                                                Just ind -> return $ Just (InsertTool (ind +1) sep)
-                                                Nothing -> return $ Nothing
-getToolInsertion tb (TPBefore str)      = do
-                                            mbIndex <- getToolIndexForName tb str
-                                            case mbIndex of
-                                                Just ind -> return $ Just
-                                                    (InsertTool ind False)
-                                                Nothing -> return $ Nothing
-getToolInsertion tb (TPAppend sep)      = return $ Just (AfterLastTool sep)
-getToolInsertion tb (TPOr mp1 mp2)      = do
-                                            mbFirst <- getToolInsertion tb mp1
-                                            case mbFirst of
-                                                Just t -> return (Just t)
-                                                Nothing -> getToolInsertion tb mp2
-
 getMenuShellForPath :: [String] -> MenuShell -> IO (Maybe MenuShell)
 getMenuShellForPath [] menu        = return (Just menu)
 getMenuShellForPath (hd:rest) menu = trace ("getMenuShellForPath " ++ show (hd:rest)) $ do
@@ -321,6 +267,74 @@ getMenuIndexForItem menu item = do
     widgets <- containerGetChildren menu
     return (elemIndex item (map castToMenuItem widgets))
 
+--------------------------------------------------------------
+-- * Toolbar
+
+buildToolItem :: ActionClass alpha => UIManager -> Toolbar -> Maybe alpha -> ActionDescr
+                    -> Maybe Int -> IO (Maybe Int)
+buildToolItem uiManager tb Nothing ad@AD{adToolbar = toolPos, adName = name} mbLast
+                     = return mbLast
+buildToolItem uiManager tb (Just action) ad@AD{adToolbar = toolPos, adName = name} mbLast
+    | toolPos == Nothing = return mbLast
+    | otherwise      = do
+        toolItem <- liftM castToToolItem (actionCreateToolItem action)
+        res <- getToolInsertion tb (fromJust toolPos)
+        case res of
+            Nothing -> error ("Menu>>buildToolItem: No valid position for: " ++ adName ad)
+            Just (InsertTool ind True) -> do
+                        sep <- separatorToolItemNew
+                        toolbarInsert tb sep ind
+                        toolbarInsert tb toolItem (ind + 1)
+                        return (Just (ind + 2))
+            Just (InsertTool ind False) -> do
+                        toolbarInsert tb toolItem ind
+                        return (Just (ind + 1))
+            Just (AfterLastTool True) -> do
+                        case mbLast of
+                            Nothing ->  error $ "Menu>>buildToolItem: No last insertion for: "
+                                                    ++ adName ad
+                            Just ind -> do
+                                toolbarInsert tb toolItem ind
+                                return (Just (ind + 1))
+            Just (AfterLastTool False) -> do
+                        case mbLast of
+                            Nothing ->  error $ "Menu>>buildToolItem: No last insertion for: "
+                                                    ++ adName ad
+                            Just ind -> do
+                                sep <- separatorToolItemNew
+                                toolbarInsert tb sep ind
+                                toolbarInsert tb toolItem (ind + 1)
+                                return (Just (ind + 2))
+
+
+
+data ToolPos = InsertTool Int Bool | AfterLastTool Bool
+
+
+getToolInsertion :: Toolbar ->  ToolPosition -> IO (Maybe ToolPos)
+getToolInsertion tb TPFirst             = return $ Just (InsertTool 0 False)
+getToolInsertion tb (TPLast sep)        = do
+                                            n <- toolbarGetNItems tb
+                                            return $ Just (InsertTool n sep)
+getToolInsertion tb (TPAfter str sep)   = do
+                                            mbIndex <- getToolIndexForName tb str
+                                            case mbIndex of
+                                                Just ind -> return $ Just (InsertTool (ind +1) sep)
+                                                Nothing -> return $ Nothing
+getToolInsertion tb (TPBefore str)      = do
+                                            mbIndex <- getToolIndexForName tb str
+                                            case mbIndex of
+                                                Just ind -> return $ Just
+                                                    (InsertTool ind False)
+                                                Nothing -> return $ Nothing
+getToolInsertion tb (TPAppend sep)      = return $ Just (AfterLastTool sep)
+getToolInsertion tb (TPOr mp1 mp2)      = do
+                                            mbFirst <- getToolInsertion tb mp1
+                                            case mbFirst of
+                                                Just t -> return (Just t)
+                                                Nothing -> getToolInsertion tb mp2
+
+
 getToolIndexForName :: Toolbar -> String -> IO (Maybe Int)
 getToolIndexForName tb name = do
     widgets <- containerGetChildren tb
@@ -334,6 +348,41 @@ getToolIndexForName tb name = do
     case res of
         [(w,idx)]  -> return (Just idx)
         otherwise  -> return Nothing
+
+toggleToolbar :: StateM ()
+toggleToolbar = do
+    mbToolbar <-  getToolbar
+    tbv       <-  toolbarVisible
+    case mbToolbar of
+        Nothing -> return ()
+        Just tb -> if tbv
+                    then liftIO $ widgetShowAll tb
+                    else liftIO $ widgetHideAll tb
+
+showToolbar :: Bool -> StateM ()
+showToolbar showIt = do
+    mbToolbar <-  getToolbar
+    uiManager <- getUiManagerSt
+    case mbToolbar of
+        Nothing -> return ()
+        Just tb -> if showIt
+                        then liftIO $ widgetShowAll tb
+                        else liftIO $ widgetHideAll tb
+    mbAct <- liftIO $ getActionFor uiManager "ToolbarVisible"
+    case mbAct of
+        Nothing -> return ()
+        Just act -> liftIO $ toggleActionSetActive (castToToggleAction act) showIt
+
+toolbarVisible :: StateM Bool
+toolbarVisible = do
+    uiManager <- getUiManagerSt
+    mbAct <- liftIO $ getActionFor uiManager "ToolbarVisible"
+    case mbAct of
+        Nothing -> return False
+        Just act -> liftIO $ toggleActionGetActive (castToToggleAction act)
+
+--------------------------------------------------------------
+-- * Sensitivity
 
 --
 -- | Setting sensivity
@@ -355,9 +404,9 @@ getActionsFor sens = do
         Just l -> do
             maybeList <- liftIO $ (mapM (getActionFor uiManager) l)
             return (catMaybes maybeList)
-  where
-    getActionFor uiManager string = do
-        actionGroups <- uiManagerGetActionGroups uiManager
-        actionGroupGetAction (head actionGroups) string
+
+getActionFor uiManager string = do
+    actionGroups <- uiManagerGetActionGroups uiManager
+    actionGroupGetAction (head actionGroups) string
 
 

@@ -24,19 +24,29 @@ module Graphics.FrameTypes (
 ,   FrameSelector(..)
 ,   SessionExtension(..)
 ,   GenSessionExtension(..)
+,   CompDescr(..)
+,   CompPosition(..)
+,   CompName
+,   CompWidget(..)
 ) where
 
 import Base
 
-import Graphics.UI.Gtk (UIManager, MenuItem)
+import Graphics.UI.Gtk
 import Data.Typeable
        (TypeRep(..), typeRepKey, cast, Typeable(..))
-import Base.State (StateM)
 import Data.Maybe (fromJust)
 import System.IO.Unsafe (unsafePerformIO)
 
 panePluginName = "billeksah-pane"
 
+data FrameSelector = FrameEventSel | PaneActiveSens | FrameStateSel | ActionStateSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector FrameSelector
+
+---------------------------------------------------------------------------------------
+-- * Types for Actions, Menus, Toolbars
 
 -- | ActionDescr is a data structure used for
 --   menus, toolbars, and accelerator keystrokes. In this implementation
@@ -56,12 +66,6 @@ data ActionDescr = AD {
 ,   adToolbar     ::   Maybe ToolPosition
 ,   adSensitivities :: [GenSelector]
 }
-
-
-data FrameSelector = FrameEventSel | PaneActiveSens | FrameStateSel | ActionStateSel
-    deriving (Eq, Ord, Show, Typeable)
-
-instance Selector FrameSelector
 
 type WithSeparator = Bool
 
@@ -93,10 +97,10 @@ data ToolPosition =
 -- | Beside Standard action we have actions which toggles a state or select from a
 -- number of possible states
 data ActionType = ActionNormal | ActionToggle | ActionSubmenu -- TODO ActionSelect alpha
-
     deriving Eq
 
-type FramePrefs = UIManager
+---------------------------------------------------------------------------------------
+-- * Types for Sessions
 
 data (Read alpha, Show alpha) => SessionExtension alpha = SessionExtension {
     seName       :: String,
@@ -105,6 +109,33 @@ data (Read alpha, Show alpha) => SessionExtension alpha = SessionExtension {
 
 data GenSessionExtension = forall alpha . (Read alpha, Show alpha) => GenS (SessionExtension alpha)
 
+---------------------------------------------------------------------------------------
+-- * Types for Statusbar
 
+type CompName = String
+
+--
+-- | Description of a Statusbar compartment
+--
+data CompDescr =
+    TextCompDescr
+        {scName          :: CompName,
+         scHasResizeGrip :: Bool,
+         scRequestedSize :: Int,
+         scPacking       :: Packing,
+         scPosition      :: CompPosition}
+
+--
+-- | Description of a Statusbar position
+--
+data CompPosition =
+    CPFirst                             -- ^ Add this item in the first position.
+    | CPLast                            -- ^ Add this item in the last position.
+    | CPAfter String                    -- ^ Add this item after the first arg string
+    | CPBefore String                   -- ^ Add this item before the first arg string
+    deriving Eq
+
+
+data CompWidget = CompWText Statusbar
 
 
