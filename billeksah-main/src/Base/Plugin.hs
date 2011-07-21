@@ -44,16 +44,14 @@ import System.Plugins.Load (LoadStatus(..))
 import Control.Monad (foldM, when)
 import Data.Maybe (catMaybes)
 import Data.Map (Map)
-import Debug.Trace (trace)
 import Data.Typeable (Typeable)
 
 
 
 -- | This has to be called from main
 runAll :: FilePath -> PluginConfig -> [Plugin] -> BaseEvent -> StateM ()
-runAll pluginPath config loadList baseEvent = trace ("runAll: " ++ show (map getPluginName loadList))
-    $ do
-
+runAll pluginPath config loadList baseEvent = do
+    message Debug ("runAll: " ++ show (map getPluginName loadList))
     -- load and pre-init the plugins
     iniRes <- loadPlugins baseEvent loadList
     -- post-init the plugins
@@ -84,15 +82,15 @@ loadPlugin
      -> StateM
           (Maybe GenInterface)
 loadPlugin baseEvent plug@Plugin{plInterface =funcName,plModule = moduleName}  =
-    trace ("loadPlugin " ++ getPluginName plug) $ do
+    do
+        message Info ("loadPlugin " ++ getPluginName plug)
         mv <- liftIO $ loadPackageFunction (getPluginName plug) moduleName funcName
         -- TODO checkVersion
         case mv of
-            Nothing ->  trace "failure" $ (evtTrigger baseEvent) (BaseError
-                            ("Cant load " ++ show (getPluginName plug)))
+            Nothing ->  message Error ("Cant load " ++ show (getPluginName plug))
                                 >> return Nothing
-            (Just interface) ->   trace "success" $do
-                    -- use it for error reporting
+            (Just interface) -> do
+                    message Info ("load succeeded " ++ getPluginName plug)
                     (piInit1 interface) baseEvent (piEvent interface)
                     return (Just (GenInterface interface))
 

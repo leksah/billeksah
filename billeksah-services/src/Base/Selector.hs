@@ -1,4 +1,5 @@
-{-# Language StandaloneDeriving, DeriveDataTypeable, ExistentialQuantification #-}
+{-# Language StandaloneDeriving, DeriveDataTypeable, ExistentialQuantification,
+    TypeFamilies #-}
 
 -----------------------------------------------------------------------------
 --
@@ -27,19 +28,21 @@ import System.IO.Unsafe (unsafePerformIO)
 ----
 ---- | A type family for unique selectors
 ----
-class (Eq s, Ord s, Show s, Typeable s) => Selector s
+class (Eq alpha, Ord alpha, Show alpha, Typeable alpha) => Selector alpha where
+    data ValueType alpha :: *
+
 
 --
 -- | Boxing for selectors
 --
-data GenSelector = forall s . (Selector s) =>  GS s
+data GenSelector = forall alpha . (Selector alpha) =>  GS alpha
     deriving (Typeable)
 
 deriving instance Show GenSelector
 
---
+
 -- | Equality and comparision for selectors
---
+
 instance Eq GenSelector where
     (==) (GS a) (GS b) = if typeOf a == typeOf b then
                     fromJust (cast a) == b

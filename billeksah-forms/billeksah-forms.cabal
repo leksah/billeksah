@@ -27,6 +27,7 @@ Library
         Graphics.Forms.Parameters
         Graphics.Forms.Simple
         Graphics.Forms.FormPane
+        Base.Preferences
     exposed: True
     buildable: True
     hs-source-dirs: src

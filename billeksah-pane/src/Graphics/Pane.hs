@@ -32,7 +32,6 @@ import Graphics.Session
 import Graphics.Statusbar
 
 import Graphics.UI.Gtk
-import Debug.Trace (trace)
 import Data.Version (Version(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Concurrent (yield)
@@ -53,25 +52,27 @@ panePluginInterface = do
          piVersion = Version [1,0,0][]}
 
 frameInit1 :: BaseEvent -> PEvent FrameEvent -> StateM ()
-frameInit1 baseEvent myEvent = trace ("init1 " ++ panePluginName) $ do
+frameInit1 baseEvent myEvent = do
+    message Debug ("init1 " ++ panePluginName)
     res <- registerActionState initialActionState
     case res of
         Nothing -> return ()
-        Just s -> (evtTrigger baseEvent) (BaseError s) >> return ()
+        Just s ->  message Error s
     return ()
 
 frameInit2 :: BaseEvent -> PEvent FrameEvent -> StateM ()
-frameInit2 baseEvent myEvent = trace ("init2 " ++ panePluginName) $ do
-    uiManager <- liftIO $ do
+frameInit2 baseEvent myEvent = do
+    message Debug ("init2 " ++ panePluginName)
+    uiManager <- reifyState (\stateR -> do
 --        res <- unsafeInitGUIForThreadedRTS
         res <- initGUI
-        putStrLn ("initGUI " ++ show res)
-        uiManagerNew
+        messageR Debug ("initGUI " ++ show res) stateR
+        uiManagerNew)
     liftIO $ initGtkRc
     res <- registerFrameState (initialFrameState uiManager)
     case res of
         Nothing -> return ()
-        Just s -> (evtTrigger baseEvent) (BaseError s) >> return ()
+        Just s ->  message Error s
     getFrameEvent >>= \e -> registerEvent' e
         (\s -> case s of
             ActivatePane pn  -> do  setSensitivity [(PaneActiveSens, True)]
@@ -152,7 +153,8 @@ frameCompartments = [
 -- | Opens up the main window, with menu, toolbar, accelerators
 --
 startupFrame :: String -> (Window -> VBox -> Notebook -> StateAction) -> StateAction
-startupFrame windowName beforeMainGUI = trace "startupFrame*" $ do
+startupFrame windowName beforeMainGUI = do
+    message Debug "startupFrame"
     --    osxApp <- OSX.applicationNew
     uiManager <- getUiManagerSt
     RegisterActions allActions       <- triggerFrameEvent (RegisterActions frameActions)
@@ -169,15 +171,15 @@ startupFrame windowName beforeMainGUI = trace "startupFrame*" $ do
     statusbar <- buildStatusbar allCompartments
     reifyState $ \ stateR -> do
 
-        win         <-  trace "1" $ windowNew
+        win         <-  windowNew
         accGroup <- uiManagerGetAccelGroup uiManager
         windowAddAccelGroup win accGroup
-        trace "2" $ widgetSetName win windowName
+        widgetSetName win windowName
         reflectState (setWindowsSt [win]) stateR
 
         vb <- vBoxNew False 1  -- Top-level vbox
         widgetSetName vb "topBox"
-        trace "before initAction" $ containerAdd win vb
+        containerAdd win vb
 
         boxPackStart vb menuBar PackNatural 0
 

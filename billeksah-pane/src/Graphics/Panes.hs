@@ -11,7 +11,8 @@
     FlexibleContexts,
     ScopedTypeVariables,
     RankNTypes,
-    FlexibleInstances #-}
+    FlexibleInstances,
+    TypeSynonymInstances #-}
    -- TypeFamilies
 -----------------------------------------------------------------------------
 --
@@ -49,6 +50,8 @@ module Graphics.Panes (
 ,   postSyncState
 ,   postAsyncState
 
+,   castCID
+
 ) where
 
 import Base
@@ -66,7 +69,6 @@ import Data.List (isPrefixOf, stripPrefix, findIndex)
 import Control.Monad (liftM, when)
 import qualified Data.Set as Set (member)
 import Data.IORef (newIORef)
-import Debug.Trace (trace)
 import Data.Version (Version(..))
 
 
@@ -157,7 +159,7 @@ class (Typeable alpha, Show (PaneState alpha), Read (PaneState alpha)) => PaneIn
 --
 -- | Signal handlers for the different pane types
 --
-data Connection =  forall alpha . GObjectClass alpha => ConnectC (ConnectId alpha)
+type Connection =  ConnectId Widget
 
 type Connections = [Connection]
 
@@ -167,7 +169,7 @@ panePathForGroup::  String -> delta PanePath
 panePathForGroup groupName = undefined
 
 signalDisconnectAll :: Connections -> IO ()
-signalDisconnectAll = mapM_ (\ (ConnectC s) -> signalDisconnect s)
+signalDisconnectAll = mapM_ (\ s -> signalDisconnect s)
 
 instance Show Window where
     show _ = "a Window"
@@ -191,7 +193,8 @@ postSyncState f = reifyState (\ideR -> postGUISync (reflectState f ideR))
 postAsyncState :: StateM () -> StateM ()
 postAsyncState f = reifyState (\ideR -> postGUIAsync (reflectState f ideR))
 
-
+castCID :: GObjectClass alpha  => ConnectId alpha -> ConnectId Widget
+castCID (ConnectId ui o) = (ConnectId ui (castToWidget o))
 
 --  ----------------------------------------
 -- * Necessary with pre 10.1 verion of gtk2hs

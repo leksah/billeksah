@@ -1,181 +1,111 @@
+{-# Language ExistentialQuantification #-}
+
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Forms.Parameters
--- Copyright   :  (c) Juergen Nicklisch-Franken
--- License     :  GNU-GPL
+-- Copyright   :
+-- License     :  AllRightsReserved
 --
--- Maintainer  :  <maintainer at leksah.org>
--- Stability   :  provisional
--- Portability :  portable
+-- Maintainer  :
+-- Stability   :
+-- Portability :
 --
 -- | Module for parameters for editors
+--  Setting of parameters: ("Name", ParaString "Hello") `setPara` defaultParameters
+-- Getting parameters getPara "Name" paras
 --
------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------
 
 module Graphics.Forms.Parameters (
+    defaultParams,
+    (<<<),
+    getPara,
+    getParaS,
+    ParaType(..),
     Parameters
-,   Parameter(..)
-,   paraName
-,   paraSynopsis
-,   paraDirection
-,   paraShowLabel
-,   paraShadow
-,   paraOuterAlignment
-,   paraInnerAlignment
-,   paraOuterPadding
-,   paraInnerPadding
-,   paraMinSize
-,   paraHorizontal
-,   paraStockId
-,   paraMultiSel
-,   paraPack
-
-,   getParameter
-,   getParameterPrim
-,   (<<<-)
-,   emptyParams
-,   Direction(..)
-,   HorizontalAlign(..)
 ) where
 
-
-import Graphics.Pane
-
-import Graphics.UI.Gtk
 import Data.Maybe
 import qualified Data.List as List
+import Graphics.Pane (Direction)
+import Graphics.UI.Gtk (Packing, ShadowType)
+import Graphics.Panes (Direction(..))
+import Graphics.UI.Gtk.General.Enums (Packing(..), ShadowType(..))
 
+
+type Parameters = [Para ParaType]
+
+-- | A generalised attribute with independent get and set types.
+data Para alpha = Para
+    {paName   :: String,
+     paValue  :: alpha}
+
+infixr 9 <<<
+
+(<<<) :: (String, ParaType) -> Parameters -> Parameters
+(<<<) (name,newValue)  paras =
+    case [ para | para <- paras, paName para == name] of
+        [p] -> p{paValue = newValue} : [ para | para <- paras, paName para /=  name]
+        _   -> error $ "Parameters >> Cant find parameter " ++ name
+
+getPara :: String -> Parameters -> ParaType
+getPara name paras =
+    case [ para | para <- paras, paName para == name] of
+        [p] -> paValue p
+        _   -> error $ "Parameters >> Cant find parameter " ++ name
+
+getParaS :: String -> Parameters -> String
+getParaS name paras = case getPara name paras of
+                    ParaString s -> s
+                    otherwise -> error "Parameters>>Not a string"
+
+data ParaType =
+    ParaString String
+    | ParaAlign (Float,Float,Float,Float)
+    | ParaPadding (Int,Int,Int,Int)
+    | ParaSize (Int,Int)
+    | ParaPos (Float,Float)
+    | ParaBool Bool
+    | ParaHori HorizontalAlign
+    | ParaDir Direction
+    | ParaShadow ShadowType
+    | ParaPack Packing
+    deriving(Eq,Show)
 
 data HorizontalAlign =   StartHorizontal | StopHorizontal | Keep
     deriving (Eq,Show)
---
--- | A type for parameters for editors
---
-type Parameters     =   [Parameter]
-
-data Parameter      =   ParaName String
-                    |   ParaSynopsis String
-                    |   ParaDirection Direction
-                    |   ParaShadow ShadowType
-                    |   ParaShowLabel Bool
-                    |   ParaOuterAlignment  (Float,Float,Float,Float)
-                                               -- | xalign yalign xscale yscale
-                    |   ParaOuterPadding    (Int,Int,Int,Int)
-                                                --  | paddingTop paddingBottom paddingLeft paddingRight
-                    |   ParaInnerAlignment  (Float,Float,Float,Float)
-                                                -- | xalign yalign xscale yscale
-                    |   ParaInnerPadding   (Int,Int,Int,Int)
-                                                --  | paddingTop paddingBottom paddingLeft paddingRight
-                    |   ParaMinSize         (Int, Int)
-                    |   ParaHorizontal      HorizontalAlign
-                    |   ParaStockId String
-                    |   ParaMultiSel Bool
-                    |   ParaPack Packing
-    deriving (Eq,Show)
 
 
-{--        #if MIN_VERSION_gtk(0,9,13)
-            -- now defined in gtk
-        #else
-        instance Show ShadowType
-            where show _    =   "Any Shadow"
-        #endif
---}
+defaultParams :: Parameters
+defaultParams =
+    [   Para "Name"            (ParaString "")
+    ,   Para "StockId"         (ParaString "")
+    ,   Para "Synopsis"        (ParaString "")
+-- For boxes
+    ,   Para "VBoxHomogeneous" (ParaBool False)
+    ,   Para "HBoxHomogeneous" (ParaBool True)
+    ,   Para "VPack"           (ParaPack PackNatural)
+    ,   Para "HPack"           (ParaPack PackGrow)
+-- For fields
+    ,   Para "OuterAlignment"  (ParaAlign (0.0, 0.0, 1, 1))
+    ,   Para "OuterPadding"    (ParaPadding (5, 5, 5, 5))
+-- the label
+    ,   Para "ShowLabel"       (ParaBool True)
+    ,   Para "LabelAlign"      (ParaPos (0.5, 0.0))
+    ,   Para "Shadow"          (ParaShadow ShadowNone)
+-- the inner alignment
+    ,   Para "InnerAlignment"  (ParaAlign (0.0, 0.0, 1, 1))
+    ,   Para "InnerPadding"    (ParaPadding (5, 5, 5, 5))
 
-emptyParams         ::   [Parameter]
-emptyParams         =   []
+-- for the field
+    ,   Para "MinSize"         (ParaSize (-1,-1))
 
-paraName                        ::   (Parameter -> (Maybe String))
-paraName (ParaName str)         =   Just str
-paraName _                      =   Nothing
+-- for special widgets
+    ,   Para "Direction"       (ParaDir Horizontal)
+    ,   Para "MultiSel"        (ParaBool True)
 
-paraSynopsis                    ::   (Parameter -> (Maybe String))
-paraSynopsis (ParaSynopsis str) =   Just str
-paraSynopsis _                  =   Nothing
 
-paraShowLabel                    ::   (Parameter -> (Maybe Bool))
-paraShowLabel (ParaShowLabel b)  =   Just b
-paraShowLabel _                  =   Nothing
-
-paraDirection                   ::   (Parameter -> (Maybe Direction))
-paraDirection (ParaDirection d) =   Just d
-paraDirection _                 =   Nothing
-
-paraShadow                      ::   (Parameter -> (Maybe ShadowType))
-paraShadow (ParaShadow d)       =   Just d
-paraShadow _                    =   Nothing
-
-paraOuterAlignment              ::   (Parameter -> (Maybe (Float,Float,Float,Float)))
-paraOuterAlignment (ParaOuterAlignment d) = Just d
-paraOuterAlignment _            =   Nothing
-
-paraInnerAlignment              ::   (Parameter -> (Maybe (Float,Float,Float,Float)))
-paraInnerAlignment (ParaInnerAlignment d) = Just d
-paraInnerAlignment _            =   Nothing
-
-paraOuterPadding                ::   (Parameter -> (Maybe (Int,Int,Int,Int)))
-paraOuterPadding (ParaOuterPadding d) = Just d
-paraOuterPadding _              =   Nothing
-
-paraInnerPadding                ::   (Parameter -> (Maybe (Int,Int,Int,Int)))
-paraInnerPadding (ParaInnerPadding d) = Just d
-paraInnerPadding _              =   Nothing
-
-paraMinSize                     ::   (Parameter -> (Maybe (Int, Int)))
-paraMinSize (ParaMinSize d)     =   Just d
-paraMinSize _                   =   Nothing
-
-paraHorizontal                  ::   (Parameter -> (Maybe (HorizontalAlign)))
-paraHorizontal (ParaHorizontal d) =   Just d
-paraHorizontal _                =   Nothing
-
-paraStockId                     ::   (Parameter -> (Maybe String))
-paraStockId (ParaStockId str)   =   Just str
-paraStockId _                   =   Nothing
-
-paraMultiSel                    ::   (Parameter -> (Maybe Bool))
-paraMultiSel (ParaMultiSel b)   =   Just b
-paraMultiSel _                  =   Nothing
-
-paraPack                        ::   (Parameter -> (Maybe Packing))
-paraPack (ParaPack b)           =   Just b
-paraPack _                      =   Nothing
-
---
--- | Convenience method to get a parameter, or if not set the default parameter
---
-getParameter :: (Parameter -> (Maybe beta)) -> Parameters -> beta
-getParameter selector parameter =
-    case getParameterPrim selector parameter of
-        Just ele       -> ele
-        _              -> case getParameterPrim selector defaultParameters of
-                            Just ele       -> ele
-                            _              -> error "default parameter not defined"
-
-getParameterPrim :: (Parameter -> (Maybe beta)) -> Parameters -> Maybe beta
-getParameterPrim selector parameter =
-    case filter isJust $ map selector parameter of
-        (Just ele) : _ -> Just ele
-        _              -> Nothing
-
-(<<<-) :: (Parameter -> (Maybe beta)) -> Parameter -> Parameters -> Parameters
-(<<<-) selector para  params = para : filter (isNothing . selector) params
-
-defaultParameters :: Parameters
-defaultParameters =
-    [   ParaName ""
-    ,   ParaStockId ""
-    ,   ParaSynopsis ""
-    ,   ParaDirection Horizontal
-    ,   ParaShadow ShadowNone
-    ,   ParaOuterAlignment  (0.4, 0.5, 1.0, 0.7)
-    ,   ParaOuterPadding    (5, 5, 5, 5)
-    ,   ParaInnerAlignment  (0.4, 0.5, 1.0, 0.7)
-    ,   ParaInnerPadding    (5, 5, 5, 5)
-    ,   ParaMinSize         (-1,-1)
-    ,   ParaHorizontal      Keep
-    ,   ParaMultiSel True
-    ,   ParaPack PackNatural
-    ,   ParaShowLabel True
+--    ,   Para "Horizontal"      (ParaHori Keep)
     ]
+
 

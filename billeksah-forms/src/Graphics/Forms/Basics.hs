@@ -49,13 +49,12 @@ import qualified Data.Map as Map  (delete,insert,lookup,empty)
 import Data.Maybe (isJust,fromJust)
 import Unsafe.Coerce (unsafeCoerce)
 import Control.Arrow (first)
-import Graphics.Forms.Parameters (Parameters)
 import Base.MyMissing (allOf)
 import Data.Typeable (Typeable)
 
 pluginNameForms = "billeksah-forms"
 
-data PaneSelector = GuiHandlerStateSel | GtkEventsStateSel | FormsEventSel
+data PaneSelector = GuiHandlerStateSel | GtkEventsStateSel | PrefsDescrState | FormsEventSel
     deriving (Eq, Ord, Show, Typeable)
 
 instance Selector PaneSelector

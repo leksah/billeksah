@@ -23,6 +23,7 @@ module Graphics.Forms.GUIEvent (
 ,   GtkHandler
 ,   Connection(..)
 ,   Connections
+,   GtkRegMap(..)
 
 ,   activateGUIEvent
 ,   activateGUIEvent'
@@ -31,8 +32,6 @@ module Graphics.Forms.GUIEvent (
 ,   triggerGUIEvent
 ,   propagateGUIEvent
 ,   retriggerAsChanged
-
-,   initialRegister
 ,   dummyGUIEvent
 ) where
 
@@ -41,6 +40,7 @@ import Graphics.Pane
 import Graphics.Forms.Basics
        (PaneSelector(..), GUIEventSelector(..), GUIEvent(..), GEvent,
         pluginNameForms)
+
 
 
 import Graphics.UI.Gtk
@@ -86,10 +86,6 @@ type GUIEventReg =  ([Connection],Map Unique [(Unique,GUIEvent)])
 --
 newtype GtkRegMap =  GtkRegMap (Map EvtID (Map GUIEventSelector GUIEventReg))
     deriving Typeable
-
-initialRegister = do
-    registerState GuiHandlerStateSel (Handlers Map.empty :: Handlers GUIEvent)
-    registerState GtkEventsStateSel (GtkRegMap Map.empty)
 
 -- | All gui events share the same map
 guiEventFactory :: EventFactory GUIEvent (Handlers GUIEvent)
@@ -206,11 +202,11 @@ activateGUIEvent' widget event registerFunc eventSel = do
 -- | A convinence method for not repeating this over and over again
 --
 getStandardRegFunction :: GUIEventSelector -> GtkRegFunc
-getStandardRegFunction FocusOut         =   \w h -> liftM ConnectC $ (castToWidget w) `onFocusOut` h
-getStandardRegFunction FocusIn          =   \w h -> liftM ConnectC $ (castToWidget w) `onFocusIn` h
-getStandardRegFunction ButtonPressed    =   \w h -> liftM ConnectC $ (castToWidget w) `onButtonPress` h
-getStandardRegFunction KeyPressed       =   \w h -> liftM ConnectC $ (castToWidget w) `afterKeyRelease` h
-getStandardRegFunction Clicked          =   \w h -> liftM ConnectC $ (castToButton w) `onClicked`
+getStandardRegFunction FocusOut         =   \w h -> (castToWidget w) `onFocusOut` h
+getStandardRegFunction FocusIn          =   \w h -> (castToWidget w) `onFocusIn` h
+getStandardRegFunction ButtonPressed    =   \w h -> (castToWidget w) `onButtonPress` h
+getStandardRegFunction KeyPressed       =   \w h -> (castToWidget w) `afterKeyRelease` h
+getStandardRegFunction Clicked          =   \w h -> liftM castCID $ (castToButton w) `onClicked`
                                                                     (h (Gtk.Event True) >> return ())
 getStandardRegFunction _    =   error "Basic>>getStandardRegFunction: no original GUI event"
 

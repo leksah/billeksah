@@ -114,8 +114,10 @@ runInIO f          =   reifyState (\ideRef -> return (\v -> reflectState (f v) i
 reflectState :: StateM a -> StateRef -> IO a
 reflectState c ideR = runReaderT c ideR
 
-catchState :: Exception e => StateM a -> (e -> IO a) -> StateM a
-catchState block handler = reifyState (\ideR -> catch (reflectState block ideR) handler)
+catchState :: Exception e => StateM a -> (e -> StateM a) -> StateM a
+catchState block handler = reifyState (\ideR -> catch (reflectState block ideR) (handler' ideR))
+  where
+    handler' ideR = (\ f e -> reflectState (f e) ideR) handler
 
 forkState :: StateAction  -> StateAction
 forkState block  = reifyState (\ideR -> forkIO  (reflectState block ideR) >> return ())

@@ -126,8 +126,8 @@ import Data.Set (Set(..))
 import Graphics.UI.Gtk.Gdk.Events (Event(..))
 import Data.IORef(newIORef)
 
-import Debug.Trace (trace)
--- trace a b = b
+-- import Debug.Trace (trace)
+trace a b = b
 
 
 -- ----------------------------------
@@ -169,8 +169,8 @@ data FrameState = FrameState {
     fsUiManager       ::  UIManager
 ,   fsWindows         ::  [Window]
 ,   fsPanes           ::  Map PaneName GenPane
-,   fsPaneMap         ::  (Map PaneName (PanePath, Connections))
-,   fsActivePane      ::  Maybe (PaneName, Connections)
+,   fsPaneMap         ::  (Map PaneName (PanePath, Connections)) -- these connections are from the build
+,   fsActivePane      ::  Maybe (PaneName, Connections)          -- and these connections from activate
 ,   fsPanePathFromNB  ::  Map Notebook PanePath
 ,   fsLayout          ::  PaneLayout
 ,   fsRecentPanes     ::  [PaneName]
@@ -284,7 +284,7 @@ class PaneInterface alpha => Pane alpha where
     getAddedIndex _ =   0
 
     makeActive      ::   alpha -> Connections -> StateM ()
-    -- ^ activates this pane
+    -- ^ activates this pane, should probably be private
     makeActive pane conn = do
         mbAP <- getActivePaneSt
         case mbAP of
@@ -303,7 +303,7 @@ class PaneInterface alpha => Pane alpha where
     closePane       ::   alpha -> StateM Bool
     -- ^ closes this pane
     closePane pane = do
-        (panePath,_)    <-  guiPropertiesFromName (paneName pane)
+        (panePath,conn)    <-  guiPropertiesFromName (paneName pane)
         nb              <-  getNotebook panePath
         mbI             <-  liftIO $notebookPageNum nb (getTopWidget pane)
         case mbI of
@@ -311,16 +311,18 @@ class PaneInterface alpha => Pane alpha where
                 error ("notebook page not found: unexpected " ++ paneName pane ++ " " ++ show panePath)
                 return False
             Just i  ->  do
-                deactivatePaneIfActive pane
+                liftIO $ signalDisconnectAll conn
                 liftIO $ do
                     notebookRemovePage nb i
                     widgetDestroy (getTopWidget pane)
+                deactivatePaneIfActive pane
                 removePaneAdmin pane
                 recent <- getRecentPanes
                 setRecentPanes  (filter (/= paneName pane) recent)
                 return True
 
     getPane         ::   StateM (Maybe alpha)
+    -- ^get a pane of this type, if one is open
     getPane = do
         selectedPanes <- getPanes
         if null selectedPanes || length selectedPanes > 1
@@ -328,12 +330,15 @@ class PaneInterface alpha => Pane alpha where
             else (return (Just $ head selectedPanes))
 
     forceGetPane    ::  Either PanePath String  -> StateM alpha
+    -- ^get a pane of this type, if not one is open panic
     forceGetPane pp =   do  mbPane <- getOrBuildPane pp
                             case mbPane of
                                 Nothing -> error "Can't get pane "
                                 Just p -> return p
 
     getOrBuildPane  ::  Either PanePath String -> StateM (Maybe alpha)
+    -- ^get a pane of this type, if one is open, or build one and for this specify either
+    -- a pane path to put it, or a group name, from which a pane path may be derived
     getOrBuildPane ePpoPid =  do
         mbPane <- getPane
         case mbPane of
@@ -349,13 +354,15 @@ class PaneInterface alpha => Pane alpha where
 
 
     displayPane     ::  alpha -> Bool -> StateM ()
+    -- ^ makes this pane visible
     displayPane pane shallGrabFocus = do
         liftIO $ bringPaneToFront pane
         when shallGrabFocus $ liftIO $ widgetGrabFocus $ getTopWidget pane
 
 
-    getAndDisplayPane :: Either PanePath String -> Bool  -> StateM (Maybe alpha)
-    getAndDisplayPane pps b = do
+    getOrBuildDisplay :: Either PanePath String -> Bool  -> StateM (Maybe alpha)
+    -- ^ is a concatination of getOrBuildPane and displayPane
+    getOrBuildDisplay pps b = do
         mbP <- getOrBuildPane pps
         case mbP of
             Nothing -> return Nothing
@@ -384,8 +391,14 @@ class PaneInterface alpha => Pane alpha where
                             Just it -> False
                 if b1 && b2
                     then do
-                        notebookInsertOrdered notebook (getTopWidget buf) (paneName buf) Nothing False
-                        addPaneAdmin buf cids panePath
+                        idx <- notebookInsertOrdered notebook (getTopWidget buf) (paneName buf) Nothing False
+                        mbPage <- liftIO $ notebookGetNthPage notebook idx
+                        mbCid <- case mbPage of
+                                    Nothing -> return Nothing
+                                    Just page -> liftM Just (reifyState (\ stateR ->
+                                        on (castToContainer page) setFocusChild (\ _ ->
+                                                liftIO (reflectState (makeActive buf []) stateR))))
+                        addPaneAdmin buf (case mbCid of {Nothing -> cids; Just c -> castCID c:cids}) panePath
                         liftIO $ do
                             widgetSetName (getTopWidget buf) (paneName buf)
                             widgetShowAll (getTopWidget buf)
@@ -395,14 +408,13 @@ class PaneInterface alpha => Pane alpha where
                     else return Nothing
 
     setChanged :: alpha -> Bool -> StateM ()
+    -- ^ Set the state of this pane to changed or not changed
     setChanged pane hasChanged = liftIO $ do
         let topWidget = getTopWidget pane
         mbNb <- getNotebookForWidget topWidget
         case mbNb of
             Nothing -> return ()
             Just nb -> markLabel nb topWidget hasChanged
-
-
 
 
 -- ---------------------------------------------------------------------
@@ -664,7 +676,7 @@ notebookInsertOrdered :: (NotebookClass self, WidgetClass child)
     -> String
     -> Maybe Label	-- the label for the page as String or Label
     -> Bool
-    -> StateM ()
+    -> StateM Int
 notebookInsertOrdered nb widget labelStr mbLabel isGroup = do
     label	    <-  case mbLabel of
                         Nothing  -> liftIO $ labelNew (Just labelStr)
@@ -683,6 +695,7 @@ notebookInsertOrdered nb widget labelStr mbLabel isGroup = do
         realPos     <-  notebookInsertPageMenu nb widget labelBox menuLabel pos
         widgetShowAll labelBox
         notebookSetCurrentPage nb realPos
+        return realPos
 
 --
 -- | used to identify a group from a pane name
@@ -790,7 +803,7 @@ closeGroup groupName = do
     let mbPath = findGroupPath groupName layout
     mainWindow <- getMainWindow
     case mbPath of
-        Nothing -> trace ("ViewFrame>>closeGroup: Group path not found: " ++ groupName) return ()
+        Nothing -> message Warning ("ViewFrame>>closeGroup: Group path not found: " ++ groupName) >> return ()
         Just path -> do
             panesMap <- getPaneMapSt
             let nameAndpathList  = filter (\(a,pp) -> path `isPrefixOf` pp)
@@ -850,6 +863,9 @@ getPanePrim = do
         then return Nothing
         else (return (Just $ head selectedPanes))
 
+--
+-- | Get all panes of a certain type
+--
 getPanes ::  Typeable alpha => Pane alpha => StateM ([alpha])
 getPanes = do
     panes' <- getPanesSt
@@ -953,14 +969,14 @@ viewSplit' :: PanePath -> Direction -> StateM ()
 viewSplit' panePath dir = do
     l <- getLayoutSt
     case layoutFromPath panePath l of
-        (TerminalP _ _ _ (Just _) _) -> trace ("ViewFrame>>viewSplit': can't split detached: ") return ()
+        (TerminalP _ _ _ (Just _) _) -> message Warning ("ViewFrame>>viewSplit': can't split detached: ") >> return ()
         _                            -> do
             activeNotebook  <- (getNotebook' "viewSplit") panePath
             ind <- liftIO $ notebookGetCurrentPage activeNotebook
             mbPD <- do
                 mbParent  <- liftIO $ widgetGetParent activeNotebook
                 case mbParent of
-                    Nothing -> trace ("ViewFrame>>viewSplit': parent not found: ") return Nothing
+                    Nothing -> message Warning ("ViewFrame>>viewSplit': parent not found: ") >> return Nothing
                     Just parent -> do
                         (nb,paneDir) <- do
                             let (name,altname,paneDir,
@@ -991,7 +1007,8 @@ viewSplit' panePath dir = do
                                 panedPack2 newpane nb True True
                                 nbIndex <- if parent `isA` gTypeNotebook
                                             then notebookPageNum ((castToNotebook' "viewSplit'1") parent) activeNotebook
-                                            else trace ("ViewFrame>>viewSplit': parent not a notebook: ") return Nothing
+                                            else trace ("ViewFrame>>viewSplit': parent not a notebook: ")
+                                                $ return Nothing
                                 containerRemove (castToContainer parent) activeNotebook
                                 widgetSetName activeNotebook name
                                 panedPack1 newpane activeNotebook True True
@@ -1018,7 +1035,8 @@ viewSplit' panePath dir = do
                                     Just n -> do
                                         notebookSetCurrentPage ((castToNotebook' "viewSplit' 5") parent) n
                                         return ()
-                                    _      -> trace ("ViewFrame>>viewSplit': parent not a notebook2: ")return ()
+                                    _      -> trace ("ViewFrame>>viewSplit': parent not a notebook2: ")
+                                                $ return ()
                                 return (nb,paneDir)
                         handleFunc <-  runInIO (handleNotebookSwitch nb)
                         liftIO $ afterSwitchPage nb handleFunc
@@ -1048,11 +1066,11 @@ viewCollapse = do
             viewCollapse' panePath
 
 viewCollapse' :: PanePath -> StateM ()
-viewCollapse' panePath = trace "viewCollapse' called" $ do
+viewCollapse' panePath = do
     layout1           <- getLayoutSt
     case layoutFromPath panePath layout1 of
-        (TerminalP _ _ _ (Just _) _) -> trace ("ViewFrame>>viewCollapse': can't collapse detached: ")
-                                            return ()
+        (TerminalP _ _ _ (Just _) _) -> message Debug ("ViewFrame>>viewCollapse': can't collapse detached: ")
+                                            >> return ()
         _                            -> do
             let newPanePath     = init panePath
             let mbOtherSidePath = otherSide panePath

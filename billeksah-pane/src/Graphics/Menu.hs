@@ -32,7 +32,6 @@ import Graphics.Statusbar
 
 
 import Data.Version (Version(..))
-import Debug.Trace (trace)
 import Data.Typeable (Typeable)
 import Control.Monad.IO.Class (MonadIO(..))
 import Graphics.UI.Gtk
@@ -53,7 +52,9 @@ registerActionState :: ActionState -> StateM (Maybe String)
 registerActionState = registerState ActionStateSel
 
 setActionState :: ActionState -> StateM ()
-setActionState    st  = trace ("setActionState: " ++ show st) $ setState ActionStateSel st
+setActionState    st  = do
+    message Debug ("setActionState: " ++ show st)
+    setState ActionStateSel st
 
 getActionState :: StateM (ActionState)
 getActionState      = getState ActionStateSel
@@ -67,7 +68,8 @@ initialActionState = Map.empty
 -- | * Builds the menu and toolbar from the action description,
 --     and registers accelerators from the action descriptions
 initActions :: UIManager -> [ActionDescr] -> StateM (MenuBar,Toolbar)
-initActions uiManager actionDescrs = trace "initActions" $ do
+initActions uiManager actionDescrs = do
+    message Debug "initAction"
     mb           <- liftIO $ menuBarNew
     tb           <- liftIO $ toolbarNew
     actionGroup  <- liftIO $ actionGroupNew "global"
@@ -230,7 +232,7 @@ getInsertion mb (MPOr mp1 mp2)      = do
 
 getMenuShellForPath :: [String] -> MenuShell -> IO (Maybe MenuShell)
 getMenuShellForPath [] menu        = return (Just menu)
-getMenuShellForPath (hd:rest) menu = trace ("getMenuShellForPath " ++ show (hd:rest)) $ do
+getMenuShellForPath (hd:rest) menu = do
     widgets <- containerGetChildren menu
     res <- filterM (\ w -> do
                             mbLabel <- binGetChild (castToBin w)
@@ -238,7 +240,7 @@ getMenuShellForPath (hd:rest) menu = trace ("getMenuShellForPath " ++ show (hd:r
                                 Nothing -> return False
                                 Just label -> do
                                         n <- labelGetText (castToLabel label)
-                                        trace ("widget name" ++ n) $ return (n == hd)) widgets
+                                        return (n == hd)) widgets
     case res of
         [w]        -> do
             submenu <- menuItemGetSubmenu (castToMenuItem w)
@@ -388,12 +390,14 @@ toolbarVisible = do
 -- | Setting sensivity
 --
 setSensitivity :: Selector s => [(s, Bool)] -> StateM ()
-setSensitivity l = trace ("setSensitivity" ++ show l) $
-    do mapM_ setSensitivitySingle l
-       trace ("after setSensitivity" ++ show l) $ return ()
-    where   setSensitivitySingle (sens,bool) = do
-                actions <- getActionsFor sens
-                liftIO $ mapM_ (\a -> actionSetSensitive a bool) actions
+setSensitivity l = do
+    message Debug ("setSensitivity " ++ show l)
+    mapM_ setSensitivitySingle l
+    message Debug ("after setSensitivity" ++ show l)
+  where
+    setSensitivitySingle (sens,bool) = do
+        actions <- getActionsFor sens
+        liftIO $ mapM_ (\a -> actionSetSensitive a bool) actions
 
 getActionsFor :: Selector s => s -> StateM [Action]
 getActionsFor sens = do

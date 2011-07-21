@@ -33,17 +33,15 @@ module Graphics.Forms.Simple (
 ,   otherEditor
 ,   imageEditor
 
-,   okCancelFields
 ) where
 
 
-import Base.Event
-import Base.State
-import Base.MyMissing (trim, allOf)
+import Base
 import Graphics.Forms.Basics
 import Graphics.Forms.Parameters
 import Graphics.Forms.Build
 import Graphics.Forms.GUIEvent
+import Graphics.Panes (Direction(..))
 
 import Graphics.UI.Gtk hiding (eventKeyName, eventModifier)
 import qualified Graphics.UI.Gtk as Gtk
@@ -56,6 +54,8 @@ import System.FilePath.Posix
 import Graphics.UI.Gtk.Gdk.Events (Event(..))
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk (Event(..))
 import Unsafe.Coerce (unsafeCoerce)
+import Control.Exception (SomeException)
+
 
 -- ------------------------------------------------------------
 -- * Simple Editors
@@ -87,8 +87,8 @@ boolEditor parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
-                    button <- checkButtonNewWithLabel (getParameter paraName parameters)
-                    widgetSetName button (getParameter paraName parameters)
+                    button <- checkButtonNewWithLabel (getParaS "Name" parameters)
+                    widgetSetName button (getParaS "Name" parameters)
                     containerAdd widget button
                     toggleButtonSetActive button bool
                     reflectState (do
@@ -104,7 +104,7 @@ boolEditor parameters notifier = do
                 Just button -> do
                     r <- toggleButtonGetActive button
                     return (Just r))
-        (paraName <<<- ParaName "" $ parameters)
+        (("Name",ParaString "") <<< parameters)
         notifier
 
 --
@@ -119,12 +119,12 @@ boolEditor2 label2 parameters notifier = do
             case core of
                 Nothing  -> do
                     box <- vBoxNew True 2
-                    radio1 <- radioButtonNewWithLabel (getParameter paraName parameters)
+                    radio1 <- radioButtonNewWithLabel (getParaS "Name" parameters)
                     radio2 <- radioButtonNewWithLabelFromWidget radio1 label2
                     boxPackStart box radio1 PackGrow 2
                     boxPackStart box radio2 PackGrow 2
-                    widgetSetName radio1 $ getParameter paraName parameters ++ ".1"
-                    widgetSetName radio2 $ getParameter paraName parameters ++ ".2"
+                    widgetSetName radio1 $ getParaS "Name" parameters ++ ".1"
+                    widgetSetName radio2 $ getParaS "Name" parameters ++ ".2"
                     containerAdd widget box
                     if bool
                         then toggleButtonSetActive radio1 True
@@ -147,7 +147,7 @@ boolEditor2 label2 parameters notifier = do
                 Just (radio1,radio2) -> do
                     r <- toggleButtonGetActive radio1
                     return (Just r))
-        (paraName <<<- ParaName "" $ parameters)
+        (("Name", ParaString "") <<< parameters)
         notifier
 
 --
@@ -199,7 +199,7 @@ enumEditor labels parameters notifier = do
                                 Nothing -> Nothing
                                 Just i -> Just (vals !! i)
                     return res)
-        (paraName <<<- ParaName "" $ parameters)
+        (("Name", ParaString "") <<< parameters)
         notifier
 
 -- | An Editor for nothing (which may report a click) in the form of a button
@@ -212,10 +212,10 @@ clickEditor canDefault parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
-                    button <- case getParameter paraStockId parameters of
-                        "" ->   buttonNewWithLabel (getParameter paraName parameters)
-                        st ->   buttonNewFromStock st
-                    widgetSetName button (getParameter paraName parameters)
+                    button <- case getPara "StockId" parameters of
+                        ParaString "" ->   buttonNewWithLabel (getParaS "Name" parameters)
+                        ParaString st ->   buttonNewFromStock st
+                    widgetSetName button (getParaS "Name" parameters)
                     containerAdd widget button
                     reflectState(
                         activateGUIEvent (castToWidget button) notifier Clicked) stateR
@@ -225,7 +225,7 @@ clickEditor canDefault parameters notifier = do
                         widgetGrabDefault button
                 Just button -> return ())
         (return (Just ()))
-        (paraName <<<- ParaName "" $ parameters)
+        (("Name",ParaString "") <<< parameters)
         notifier
 
 -- | An Editor to display an image
@@ -239,7 +239,7 @@ imageEditor parameters notifier = do
             case core of
                 Nothing  -> do
                     image <- imageNewFromStock stockId IconSizeLargeToolbar
-                    widgetSetName image (getParameter paraName parameters)
+                    widgetSetName image (getParaS "Name" parameters)
                     containerAdd widget image
                     writeIORef coreRef (Just (image,stockId))
                 Just (image,stockId2) -> imageSetFromStock image stockId IconSizeLargeToolbar)
@@ -263,7 +263,7 @@ stringEditor validation trimBlanks parameters notifier = do
             case core of
                 Nothing  -> do
                     entry   <-  entryNew
-                    widgetSetName entry (getParameter paraName parameters)
+                    widgetSetName entry (getParaS "Name" parameters)
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget entry) notifier)
                             genericGUIEvents
@@ -296,7 +296,7 @@ multilineStringEditor parameters notifier = do
             case core of
                 Nothing  -> do
                     aTextView       <-  textViewNew
-                    widgetSetName aTextView (getParameter paraName parameters)
+                    widgetSetName aTextView (getParaS "Name" parameters)
                     aScrolledWindow <-  scrolledWindowNew Nothing Nothing
                     scrolledWindowSetPolicy aScrolledWindow PolicyAutomatic PolicyAutomatic
                     containerAdd aScrolledWindow aTextView
@@ -321,7 +321,7 @@ multilineStringEditor parameters notifier = do
                     end             <-  textBufferGetEndIter buffer
                     r               <-  textBufferGetText buffer start end False
                     return (Just r))
-        parameters
+        (("HPack",ParaPack PackGrow) <<<("VPack",ParaPack PackGrow) <<< parameters)
         notifier
 
 --
@@ -336,7 +336,7 @@ intEditor (min, max, step) parameters notifier = do
             case core of
                 Nothing  -> do
                     spin <- spinButtonNewWithRange min max step
-                    widgetSetName spin (getParameter paraName parameters)
+                    widgetSetName spin  (getParaS "Name" parameters)
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget spin) notifier)
                             (genericGUIEvents)
@@ -372,9 +372,9 @@ genericEditor parameters notifier = do
         s <- ext
         case s of
             Nothing -> return Nothing
-            Just s -> liftIO $ catch (liftM Just (readIO s))
-                            (\e -> do
-                                putStrLn ("Generic editor no parse for " ++ s ++ " " ++ show e)
+            Just s -> catchState (liftM Just (liftIO $ readIO s))
+                            (\ (e :: SomeException) -> do
+                                message Error ("Generic editor no parse for " ++ s ++ " " ++ show e)
                                 return Nothing)
     return (wid,ginj,gext)
 
@@ -389,8 +389,8 @@ buttonEditor parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
-                    button <- buttonNewWithLabel (getParameter paraName parameters)
-                    widgetSetName button (getParameter paraName parameters)
+                    button <- buttonNewWithLabel  (getParaS "Name" parameters)
+                    widgetSetName button  (getParaS "Name" parameters)
                     containerAdd widget button
                     reflectState (
                         mapM_ (activateGUIEvent (castToWidget button) notifier )
@@ -415,7 +415,7 @@ comboSelectionEditor list showF parameters notifier = do
                 Nothing  -> do
                     combo <- comboBoxNewText
                     mapM_ (\o -> comboBoxAppendText combo (showF o)) list
-                    widgetSetName combo (getParameter paraName parameters)
+                    widgetSetName combo (getParaS "Name" parameters)
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget combo) notifier )
                             genericGUIEvents
@@ -462,7 +462,7 @@ multiselectionEditor parameters notifier = do
                 Nothing  -> do
                     listStore   <- listStoreNew ([]:: [alpha])
                     listView    <- treeViewNewWithModel listStore
-                    widgetSetName listView (getParameter paraName parameters)
+                    widgetSetName listView (getParaS "Name" parameters)
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget listView) notifier)
                             genericGUIEvents
@@ -501,7 +501,6 @@ multiselectionEditor parameters notifier = do
 --
 -- | Editor for the selection of some elements from a static list of elements in the
 -- | form of a list box with toggle elements
-
 staticListMultiEditor :: (Eq beta) => [beta] -> (beta -> String) -> Editor [beta]
 staticListMultiEditor list showF parameters notifier = do
     coreRef <- liftIO $ newIORef Nothing
@@ -512,7 +511,7 @@ staticListMultiEditor list showF parameters notifier = do
                 Nothing  -> do
                     listStore <- listStoreNew ([]:: [(Bool,beta)])
                     listView <- treeViewNewWithModel listStore
-                    widgetSetName listView (getParameter paraName parameters)
+                    widgetSetName listView (getParaS "Name" parameters)
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget listView) notifier)
                              genericGUIEvents
@@ -535,7 +534,7 @@ staticListMultiEditor list showF parameters notifier = do
                     treeViewSetHeadersVisible listView False
                     listStoreClear listStore
                     mapM_ (listStoreAppend listStore) $ map (\e -> (elem e objs,e)) list
-                    let minSize =   getParameter paraMinSize parameters
+                    let ParaSize minSize =   getPara "MinSize" parameters
                     uncurry (widgetSetSizeRequest listView) minSize
                     sw          <-  scrolledWindowNew Nothing Nothing
                     containerAdd sw listView
@@ -586,16 +585,16 @@ staticListEditor list showF parameters notifier = do
                 Nothing  -> do
                     listStore <- listStoreNew ([]:: [alpha])
                     listView <- treeViewNewWithModel listStore
-                    widgetSetName listView (getParameter paraName parameters)
+                    widgetSetName listView (getParaS "Name" parameters)
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget listView) notifier)
                                 genericGUIEvents
                         retriggerAsChanged notifier [KeyPressed,ButtonPressed]) stateR
                     sel <- treeViewGetSelection listView
                     treeSelectionSetMode sel
-                        (case getParameter paraMultiSel parameters of
-                            True  -> SelectionMultiple
-                            False -> SelectionSingle)
+                        (case getPara "MultiSel" parameters of
+                            ParaBool True  -> SelectionMultiple
+                            ParaBool False -> SelectionSingle)
                     renderer <- cellRendererTextNew
                     col <- treeViewColumnNew
                     treeViewAppendColumn listView col
@@ -605,7 +604,7 @@ staticListEditor list showF parameters notifier = do
                     treeViewSetHeadersVisible listView False
                     listStoreClear listStore
                     mapM_ (listStoreAppend listStore) list
-                    let minSize =   getParameter paraMinSize parameters
+                    let ParaSize minSize =   getPara "MinSize" parameters
                     uncurry (widgetSetSizeRequest listView) minSize
                     sw          <-  scrolledWindowNew Nothing Nothing
                     containerAdd sw listView
@@ -650,9 +649,9 @@ fileEditor mbFilePath action buttonName parameters notifier = do
             case core of
                 Nothing  -> do
                     button <- buttonNewWithLabel buttonName
-                    widgetSetName button $ getParameter paraName parameters ++ "-button"
+                    widgetSetName button $ getParaS "Name" parameters ++ "-button"
                     entry   <-  entryNew
-                    widgetSetName entry $ getParameter paraName parameters ++ "-entry"
+                    widgetSetName entry $ getParaS "Name" parameters ++ "-entry"
                     -- set entry [ entryEditable := False ]
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget button) notifier)
@@ -662,11 +661,11 @@ fileEditor mbFilePath action buttonName parameters notifier = do
                         registerGUIEvent notifier [Clicked] (buttonHandler entry)
                         retriggerAsChanged notifier [KeyPressed,ButtonPressed]) stateR
 
-                    box <- case getParameter paraDirection parameters of
-                                Horizontal  -> do
+                    box <- case getPara "Direction" parameters of
+                                ParaDir Horizontal  -> do
                                     r <- hBoxNew False 1
                                     return (castToBox r)
-                                Vertical    -> do
+                                ParaDir Vertical    -> do
                                     r <- vBoxNew False 1
                                     return (castToBox r)
                     boxPackStart box entry PackGrow 0
@@ -736,7 +735,7 @@ fontEditor parameters notifier = do
             case core of
                 Nothing  -> do
                     fs <- fontButtonNew
-                    widgetSetName fs $ getParameter paraName parameters
+                    widgetSetName fs $ getParaS "Name" parameters
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget fs) notifier)
                                     (Clicked: genericGUIEvents)
@@ -778,7 +777,7 @@ colorEditor parameters notifier = do
             case core of
                 Nothing  -> do
                     cs <- colorButtonNew
-                    widgetSetName cs $ getParameter paraName parameters
+                    widgetSetName cs $ getParaS "Name" parameters
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget cs) notifier )
                             (Clicked: genericGUIEvents)
@@ -814,8 +813,8 @@ otherEditor func parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
-                    button <- buttonNewWithLabel (getParameter paraName parameters)
-                    widgetSetName button $ getParameter paraName parameters
+                    button <- buttonNewWithLabel (getParaS "Name" parameters)
+                    widgetSetName button $ getParaS "Name" parameters
                     containerAdd widget button
                     reflectState (do
                         mapM_ (activateGUIEvent (castToWidget button) notifier)
@@ -829,7 +828,7 @@ otherEditor func parameters notifier = do
             case core of
                 Nothing -> return Nothing
                 Just (_,val) -> return (Just val))
-        (paraName <<<- ParaName "" $ parameters)
+        (("Name",ParaString "") <<< parameters)
         notifier
     where
     buttonHandler coreRef e = liftIO $ do
@@ -837,27 +836,27 @@ otherEditor func parameters notifier = do
         case core of
             Nothing -> error "You have to inject a value before the button can be clicked"
             Just (b,val) -> do
-                res <- func val (getParameter paraName parameters)
+                res <- func val (getParaS "Name" parameters)
                 case res of
                     Nothing     -> return (e{geGtkReturn=True})
                     Just nval   -> do
                         writeIORef coreRef (Just (b, nval))
                         return (e{geGtkReturn=True})
 
-okCancelFields :: FieldDescription ()
-okCancelFields = HFD emptyParams [
-        mkField
-            (paraStockId <<<- ParaStockId stockCancel
-                $ paraName <<<- ParaName "Cancel"
-                    $ emptyParams)
-            (const ())
-            (\ _ b -> b)
-            (clickEditor False)
-    ,   mkField
-            (paraStockId <<<- ParaStockId stockOk
-                $ paraName <<<- ParaName "Ok"
-                    $ emptyParams)
-            (const ())
-            (\ a b -> b)
-            (clickEditor True)]
+--okCancelFields :: FieldDescription ()
+--okCancelFields = HFD emptyParams [
+--        mkField
+--            (paraStockId <<<- ParaStockId stockCancel
+--                $ paraName <<<- ParaName "Cancel"
+--                    $ emptyParams)
+--            (const ())
+--            (\ _ b -> b)
+--            (clickEditor False)
+--    ,   mkField
+--            (paraStockId <<<- ParaStockId stockOk
+--                $ paraName <<<- ParaName "Ok"
+--                    $ emptyParams)
+--            (const ())
+--            (\ a b -> b)
+--            (clickEditor True)]
 

@@ -17,13 +17,13 @@ module Graphics.Forms.FormPane where
 
 import Base
 
-import Graphics.Forms.Build (FieldDescription, buildEditor)
+import Graphics.Forms.Build (FieldDescriptionG, buildEditor)
 import Graphics.Forms.GUIEvent
        (registerGUIEvent, dummyGUIEvent, triggerGUIEvent)
 import Graphics.Forms.Basics
        (Extractor, Injector, GUIEvent(..), GUIEventSelector(..))
 import Graphics.Frame (setChanged, closePane, Pane)
-import Graphics.Panes (Connections, PanePath)
+import Graphics.Panes (Connections, PanePath, castCID)
 
 import Graphics.UI.Gtk
 import Control.Monad.IO.Class (MonadIO(..))
@@ -31,14 +31,16 @@ import Data.IORef (newIORef, readIORef, writeIORef)
 import Control.Monad (when)
 
 data FormPaneDescr alpha beta  =  FormPaneDescr {
-    fpGetPane      :: Pane beta  => VBox -> Injector alpha -> Extractor alpha -> beta,
-    fpSaveAction   :: alpha -> StateM (),
-    fpEqual        :: alpha -> alpha -> Bool,
-    fpGuiHandlers  :: [([GUIEventSelector],Handler GUIEvent)],
-    fpExtraButtons :: [(String,StateM ())]}
+    fpGetPane      :: Pane beta  => VBox -> Injector alpha -> Extractor alpha -> beta, -- ^ Construct the pane data type
+    fpSaveAction   :: alpha -> StateM (),                                   -- ^ Called when the save button is hit
+    fpHasChanged   :: alpha -> alpha -> Bool,                                   -- ^ Judge if this qualify as a change
+    fpGuiHandlers  :: [([GUIEventSelector],Handler GUIEvent)],          -- ^ Handle GUI Events triggered
+    fpExtraButtons :: [(String,StateM ())]}                             -- ^ Add extra buttons with handlers
 
-
-buildFormsPane :: Pane beta  => FieldDescription alpha  ->  alpha  -> FormPaneDescr alpha beta
+--
+-- | Returns a builder for a pane
+-- Requires a forms description, an initial value and a FormPaneDescr
+buildFormsPane :: Pane beta  => FieldDescriptionG alpha  ->  alpha  -> FormPaneDescr alpha beta
                         -> (PanePath -> Notebook -> Window -> StateM (Maybe beta, Connections))
 buildFormsPane descr val formDescr = \ panePath notebook window -> do
     reifyState (\ stateR -> do
@@ -83,7 +85,7 @@ buildFormsPane descr val formDescr = \ panePath notebook window -> do
         let pane  = (fpGetPane formDescr) vb inj2 (ext val)
 
         --Events
-        saveB `onClicked` (do
+        cid1 <- saveB `onClicked` (do
             mbV <- reflectState (ext val) stateR
             case mbV of
                 Nothing -> return ()
@@ -94,11 +96,11 @@ buildFormsPane descr val formDescr = \ panePath notebook window -> do
                         triggerGUIEvent notifier dummyGUIEvent{geSelector= MayHaveChanged}) stateR
                     return ())
 
-        revertB `onClicked` (do
+        cid2 <- revertB `onClicked` (do
             old <- readIORef lastSaved
             reflectState (inj old) stateR)
 
-        closeB `onClicked` do
+        cid3 <- closeB `onClicked` do
             (hasChanged',_) <- reflectState (hasChanged ext lastSaved) stateR
             if not hasChanged'
                 then reflectState (closePane pane >> return ()) stateR
@@ -115,7 +117,7 @@ buildFormsPane descr val formDescr = \ panePath notebook window -> do
                             reflectState (closePane pane >> return ()) stateR
                         _  ->   return ()
 
-        mapM (\ (button,handler) -> button `onClicked` (reflectState handler stateR))
+        cids <- mapM (\ (button,handler) -> button `onClicked` (reflectState handler stateR))
             (zip extraButtons (map snd (fpExtraButtons formDescr)))
 
         reflectState (do
@@ -137,12 +139,12 @@ buildFormsPane descr val formDescr = \ panePath notebook window -> do
             mapM_ (\ (selectors,handler) -> registerGUIEvent notifier selectors handler)
                 (fpGuiHandlers formDescr)) stateR
 
-        return (Just pane,[]))
+        return (Just pane, map castCID ([cid1, cid2, cid3] ++ cids)))
   where
     hasChanged ext lastSavedRef = do
         old <- liftIO $ readIORef lastSavedRef
         mbP <- ext old
         return $ case mbP of
                     Nothing -> (False,False)
-                    Just p -> (not ((fpEqual formDescr) p old), True)
+                    Just p -> (not ((fpHasChanged formDescr) p old), True)
 

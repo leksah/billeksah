@@ -41,6 +41,9 @@ import Graphics.Forms.Default
 import Base.Event
 import Base.State
 import Base.MyMissing (forceJust)
+import Graphics.Pane (Direction(..), castCID)
+
+
 
 import Control.Monad.IO.Class(liftIO)
 import Graphics.UI.Gtk
@@ -59,8 +62,8 @@ import Distribution.Text (simpleParse, display)
 import Distribution.Package (pkgName)
 import Data.Version (Version(..))
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk (Event(..))
-import Debug.Trace (trace)
 import Data.Typeable (Typeable)
+
 
 --
 -- | An editor which composes two subeditors
@@ -78,11 +81,11 @@ pairEditor (fstEd,fstPara) (sndEd,sndPara) parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
-                    box <- case getParameter paraDirection parameters of
-                        Horizontal -> do
+                    box <- case getPara "Direction" parameters of
+                        ParaDir Horizontal -> do
                             b <- hBoxNew False 1
                             return (castToBox b)
-                        Vertical -> do
+                        ParaDir Vertical -> do
                             b <- vBoxNew False 1
                             return (castToBox b)
                     boxPackStart box fstFrame PackGrow 0
@@ -127,11 +130,11 @@ tupel3Editor p1 p2 p3 parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
-                    box <- case getParameter paraDirection parameters of
-                        Horizontal -> do
+                    box <- case getPara "Direction" parameters of
+                        ParaDir Horizontal -> do
                             b <- hBoxNew False 1
                             return (castToBox b)
-                        Vertical -> do
+                        ParaDir Vertical -> do
                             b <- vBoxNew False 1
                             return (castToBox b)
                     boxPackStart box frame1 PackGrow 0
@@ -177,11 +180,11 @@ splitEditor (fstEd,fstPara) (sndEd,sndPara) parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
-                    paned <- case getParameter paraDirection parameters of
-                        Horizontal  -> do  h <- vPanedNew
-                                           return (castToPaned h)
-                        Vertical    -> do  v <- hPanedNew
-                                           return (castToPaned v)
+                    paned <- case getPara "Direction" parameters of
+                        ParaDir Horizontal  -> do  h <- vPanedNew
+                                                   return (castToPaned h)
+                        ParaDir Vertical    -> do  v <- hPanedNew
+                                                   return (castToPaned v)
                     panedPack1 paned fstFrame True True
                     panedPack2 paned sndFrame True True
                     containerAdd widget paned
@@ -221,15 +224,15 @@ maybeEditor (childEdit, childParams) positive boolLabel parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
-                    box <- case getParameter paraDirection parameters of
-                        Horizontal -> do
+                    box <- case getPara "Direction" parameters of
+                        ParaDir Horizontal -> do
                             b <- hBoxNew False 1
                             return (castToBox b)
-                        Vertical -> do
+                        ParaDir Vertical -> do
                             b <- vBoxNew False 1
                             return (castToBox b)
                     be@(boolFrame,inj1,ext1)  <- reflectState (boolEditor
-                            (paraName <<<- ParaName boolLabel $ emptyParams)
+                            (("Name",ParaString boolLabel) <<< defaultParams)
                         notifierBool) stateR
                     boxPackStart box boolFrame PackNatural 0
                     containerAdd widget box
@@ -350,15 +353,15 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
-                    box <- case getParameter paraDirection parameters of
-                        Horizontal -> do
+                    box <- case getPara "Direction" parameters of
+                        ParaDir Horizontal -> do
                             b <- hBoxNew False 1
                             return (castToBox b)
-                        Vertical -> do
+                        ParaDir Vertical -> do
                             b <- vBoxNew False 1
                             return (castToBox b)
                     be@(boolFrame,inj1,ext1) <- reflectState (boolEditor
-                        (paraName <<<- ParaName boolLabel $ emptyParams)
+                        (("Name",ParaString boolLabel) <<< defaultParams)
                         notifierBool) stateR
                     boxPackStart box boolFrame PackNatural 0
                     containerAdd widget box
@@ -492,20 +495,20 @@ eitherOrEditor (leftEditor,leftParams) (rightEditor,rightParams)
     noti2 <- makeGUIEvent
     noti3 <- makeGUIEvent
     propagateGUIEvent notifier [noti1,noti2,noti3] allGUIEvents
-    be@(boolFrame,inj1,ext1) <- boolEditor2  (getParameter paraName rightParams) leftParams noti1
-    le@(leftFrame,inj2,ext2) <- leftEditor (paraName <<<- ParaName "" $ leftParams) noti2
-    re@(rightFrame,inj3,ext3) <- rightEditor (paraName <<<- ParaName "" $ rightParams) noti3
+    be@(boolFrame,inj1,ext1) <- boolEditor2  (getParaS "Name" rightParams) leftParams noti1
+    le@(leftFrame,inj2,ext2) <- leftEditor (("Name", ParaString "") <<< leftParams) noti2
+    re@(rightFrame,inj3,ext3) <- rightEditor (("Name", ParaString "") <<<rightParams) noti3
     mkEditor
         (\widget v -> do
             core <- liftIO $ readIORef coreRef
             case core of
                 Nothing  -> do
                     registerGUIEvent noti1 [Clicked] (onClickedHandler widget coreRef)
-                    box <- case getParameter paraDirection parameters of
-                        Horizontal -> do
+                    box <- case getPara "Direction" parameters of
+                        ParaDir Horizontal -> do
                             b <- liftIO $ hBoxNew False 1
                             return (castToBox b)
-                        Vertical -> do
+                        ParaDir Vertical -> do
                             b <- liftIO $ vBoxNew False 1
                             return (castToBox b)
                     liftIO $ boxPackStart box boolFrame PackNatural 0
@@ -553,7 +556,7 @@ eitherOrEditor (leftEditor,leftParams) (rightEditor,rightParams)
                             case value of
                                 Nothing -> return Nothing
                                 Just value -> return (Just (Right value)))
-        (paraName <<<- ParaName "" $ parameters)
+        (("Name",ParaString "") <<< parameters)
         notifier
     where
     onClickedHandler widget coreRef event =  do
@@ -589,12 +592,12 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
             core <- liftIO $ readIORef coreRef
             case core of
                 Nothing  -> do
-                    (box,buttonBox) <- case getParameter paraDirection parameters of
-                        Horizontal -> do
+                    (box,buttonBox) <- case getPara "Direction" parameters of
+                        ParaDir Horizontal -> do
                             b  <- liftIO $ hBoxNew False 1
                             bb <- liftIO $ vButtonBoxNew
                             return (castToBox b,castToButtonBox bb)
-                        Vertical -> do
+                        ParaDir Vertical -> do
                             b  <- liftIO $ vBoxNew False 1
                             bb <- liftIO $ hButtonBoxNew
                             return (castToBox b,castToButtonBox bb)
@@ -614,28 +617,28 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                         (\ w h -> do
                             res     <-  after (castToTreeModel w) rowInserted (\ _ _ ->
                                 h (Gtk.Event True) >> return ())
-                            return (ConnectC res)) MayHaveChanged
+                            return (castCID res)) MayHaveChanged
                     activateGUIEvent' listStoreUnselected notifier
                         (\ w h -> do
                             res     <-  after (castToTreeModel w) rowDeleted (\ _ ->
                                 h (Gtk.Event True) >> return ())
-                            return (ConnectC res)) MayHaveChanged
+                            return (castCID res)) MayHaveChanged
                     activateGUIEvent' listStoreSelected notifier
                         (\ w h -> do
                             res     <-  after (castToTreeModel w) rowInserted (\ _ _ ->
                                 h (Gtk.Event True) >> return ())
-                            return (ConnectC res)) MayHaveChanged
+                            return (castCID res)) MayHaveChanged
                     activateGUIEvent' listStoreSelected notifier
                         (\ w h -> do
                             res     <-  after (castToTreeModel w) rowDeleted (\ _ ->
                                 h (Gtk.Event True) >> return ())
-                            return (ConnectC res)) MayHaveChanged
+                            return (castCID res)) MayHaveChanged
 
 
                     reifyState $ \ stateR -> do
                     -- Two tree views
                         treeViewSelected  <-  treeViewNewWithModel listStoreSelected
-                        let minSize =   getParameter paraMinSize parameters
+                        let ParaSize minSize =  getPara "MinSize" parameters
 
                         uncurry (widgetSetSizeRequest treeViewSelected) minSize
                         sw1          <-  scrolledWindowNew Nothing Nothing
@@ -667,7 +670,7 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
 
 
                         treeViewUnselected  <-  liftIO $ treeViewNewWithModel listStoreUnselected
-                        let minSize =   getParameter paraMinSize parameters
+                        let ParaSize minSize =   getPara "MinSize" parameters
                         uncurry (widgetSetSizeRequest treeViewUnselected) minSize
                         sw2          <-  scrolledWindowNew Nothing Nothing
                         containerAdd sw2 treeViewUnselected
@@ -737,7 +740,7 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                     v1 <- listStoreToList listStoreSelected
                     v2 <- listStoreToList listStoreUnselected
                     return (Just (v1,v2)))
-        (paraMinSize <<<- ParaMinSize (-1,-1) $ parameters)
+        (("MinSize",ParaSize (-1,-1)) <<< parameters)
         notifier
   where
     fill selected choices listStoreSelected listStoreUnselected =
@@ -810,12 +813,12 @@ multisetEditor (ColumnDescr showHeaders columnsDD) (singleEditor, sParams) mbSor
             core <- liftIO $ readIORef coreRef
             case core of
                 Nothing  -> do
-                    (box,buttonBox) <- case getParameter paraDirection parameters of
-                        Horizontal -> do
+                    (box,buttonBox) <- case getPara "Direction" parameters of
+                        ParaDir Horizontal -> do
                             b  <- liftIO $ hBoxNew False 1
                             bb <- liftIO $ vButtonBoxNew
                             return (castToBox b,castToButtonBox bb)
-                        Vertical -> do
+                        ParaDir Vertical -> do
                             b  <- liftIO $ vBoxNew False 1
                             bb <- liftIO $ hButtonBoxNew
                             return (castToBox b,castToButtonBox bb)
@@ -830,14 +833,14 @@ multisetEditor (ColumnDescr showHeaders columnsDD) (singleEditor, sParams) mbSor
                         (\ w h -> do
                             res     <-  after (castToTreeModel w) rowInserted (\ _ _ ->
                                 h (Gtk.Event True) >> return ())
-                            return (ConnectC res)) MayHaveChanged
+                            return (castCID res)) MayHaveChanged
                     activateGUIEvent' listStore notifier
                         (\ w h -> do
                             res     <-  after (castToTreeModel w) rowDeleted (\ _ ->
                                 h (Gtk.Event True) >> return ())
-                            return (ConnectC res)) MayHaveChanged
+                            return (castCID res)) MayHaveChanged
                     treeView        <-  liftIO $ treeViewNewWithModel listStore
-                    let minSize =   getParameter paraMinSize parameters
+                    let ParaSize minSize =   getPara "MinSize" parameters
                     reifyState $ \ stateR -> do
                         uncurry (widgetSetSizeRequest treeView) minSize
                         sw          <-  scrolledWindowNew Nothing Nothing
@@ -921,7 +924,7 @@ multisetEditor (ColumnDescr showHeaders columnsDD) (singleEditor, sParams) mbSor
                 Just listStore -> do
                     v <- listStoreToList listStore
                     return (Just v))
-        (paraMinSize <<<- ParaMinSize (-1,-1) $ parameters)
+        (("MinSize",ParaSize (-1,-1)) <<< parameters)
         notifier
     where
 --    selectionHandler :: TreeSelection -> ListStore a -> Injector a -> IO ()
@@ -940,30 +943,30 @@ filesEditor :: Maybe FilePath -> FileChooserAction -> String -> Editor [FilePath
 filesEditor fp act label p =
     multisetEditor
         (ColumnDescr False [("",(\row -> [cellText := row]),Nothing)])
-        (fileEditor fp act label, emptyParams)
+        (fileEditor fp act label, defaultParams)
         (Just sort)
         (Just (==))
-        (paraShadow <<<- ParaShadow ShadowIn $
-            paraDirection  <<<- ParaDirection Vertical $ p)
+        (("Shadow", ParaShadow ShadowIn) <<<
+            (("Direction", ParaDir Vertical) <<< p))
 
 stringsEditor :: (String -> Bool) -> Bool -> Editor [String]
 stringsEditor validation trimBlanks p =
     multisetEditor
         (ColumnDescr False [("",(\row -> [cellText := row]),Nothing)])
-        (stringEditor validation trimBlanks, emptyParams)
+        (stringEditor validation trimBlanks, defaultParams)
         (Just sort)
         (Just (==))
-        (paraShadow <<<- ParaShadow ShadowIn $ p)
+        (("Shadow", ParaShadow ShadowIn) <<< p)
 
 dependencyEditor :: [PackageIdentifier] -> Editor Dependency
 dependencyEditor packages para noti = do
     (wid,inj,ext) <- pairEditor
         ((eitherOrEditor (comboSelectionEditor ((sort . nub) (map (display . pkgName) packages)) id
-            , paraName <<<- ParaName "Select" $ emptyParams)
-            (stringEditor (const True) True, paraName <<<- ParaName "Enter" $ emptyParams)
-            "Select from list?"), paraName <<<- ParaName "Name"$ emptyParams)
-        (versionRangeEditor,paraName <<<- ParaName "Version" $ emptyParams)
-        (paraDirection <<<- ParaDirection Vertical $ para)
+            , ("Name", ParaString "Select") <<< defaultParams)
+            (stringEditor (const True) True, ("Name", ParaString "Enter") <<< defaultParams)
+            "Select from list?"), ("Name", ParaString  "Name") <<< defaultParams)
+        (versionRangeEditor,("Name", ParaString "Version") <<< defaultParams)
+        (("Direction", ParaDir Vertical) <<< para)
         noti
     let pinj (Dependency pn@(PackageName s) v) = if elem s (map (display . pkgName) packages)
                                                     then inj (Left s,v)
@@ -986,17 +989,15 @@ dependenciesEditor packages p noti =
                            ,("Version",\(Dependency _ vers) ->
                                     [cellText := display vers], Nothing)])
         (dependencyEditor packages,
-            paraOuterAlignment <<<- ParaInnerAlignment (0.0, 0.5, 1.0, 1.0)
-                $ paraInnerAlignment <<<- ParaOuterAlignment (0.0, 0.5, 1.0, 1.0)
-                   $ emptyParams)
+            ("OuterAlignment",ParaAlign (0.0, 0.5, 1.0, 1.0)) <<<
+                (("InnerAlignment", ParaAlign (0.0, 0.5, 1.0, 1.0)) <<< defaultParams))
         (Just (sortBy (\ (Dependency p1 _) (Dependency p2 _) -> compare p1 p2)))
         (Just (\ (Dependency p1 _) (Dependency p2 _) -> p1 == p2))
-        (paraShadow <<<- ParaShadow ShadowIn
-            $ paraOuterAlignment <<<- ParaInnerAlignment (0.0, 0.5, 1.0, 1.0)
-                $ paraInnerAlignment <<<- ParaOuterAlignment (0.0, 0.5, 1.0, 1.0)
-                    $ paraDirection  <<<-  ParaDirection Vertical
-                        $ paraPack <<<- ParaPack PackGrow
-                            $ p)
+        (("Shadow", ParaShadow ShadowIn) <<<
+            ("OuterAlignment",ParaAlign (0.0, 0.5, 1.0, 1.0)) <<<
+                ("InnerAlignment", ParaAlign (0.0, 0.5, 1.0, 1.0)) <<<
+                    ("Direction",ParaDir Vertical) <<<
+                       ("VPack",ParaPack PackGrow) <<< p)
         noti
 
 versionRangeEditor :: Editor VersionRange
@@ -1005,28 +1006,27 @@ versionRangeEditor para noti = do
         maybeEditor
             ((eitherOrEditor
                 (pairEditor
-                    (comboSelectionEditor v1 show, emptyParams)
-                    (versionEditor, paraName <<<- ParaName "Enter Version" $ emptyParams),
-                        (paraDirection <<<- ParaDirection Vertical
-                            $ paraName <<<- ParaName "Simple"
-                            $ paraOuterAlignment <<<- ParaOuterAlignment  (0.0, 0.0, 0.0, 0.0)
-                            $ paraOuterPadding <<<- ParaOuterPadding    (0, 0, 0, 0)
-                            $ paraInnerAlignment <<<- ParaInnerAlignment  (0.0, 0.0, 0.0, 0.0)
-                            $ paraInnerPadding <<<- ParaInnerPadding   (0, 0, 0, 0)
-                            $ emptyParams))
+                    (comboSelectionEditor v1 show, defaultParams)
+                    (versionEditor, ("Name",ParaString "Enter Version") <<< defaultParams),
+                        (("Direction",ParaDir Vertical) <<<
+                            ("Name",ParaString "Simple") <<<
+                            ("OuterAlignment",ParaAlign  (0.0, 0.0, 0.0, 0.0)) <<<
+                            ("OuterPadding", ParaPadding (0, 0, 0, 0)) <<<
+                            ("InnerAlignment", ParaAlign  (0.0, 0.0, 0.0, 0.0)) <<<
+                            ("InnerPadding", ParaPadding   (0, 0, 0, 0)) <<< defaultParams))
                 (tupel3Editor
-                    (comboSelectionEditor v2 show, emptyParams)
-                    (versionRangeEditor, paraShadow <<<- ParaShadow ShadowIn $ emptyParams)
-                    (versionRangeEditor, paraShadow <<<- ParaShadow ShadowIn $ emptyParams),
-                        paraName <<<- ParaName "Complex"
-                        $    paraDirection <<<- ParaDirection Vertical
-                        $ paraOuterAlignment <<<- ParaOuterAlignment  (0.0, 0.0, 0.0, 0.0)
-                        $ paraOuterPadding <<<- ParaOuterPadding    (0, 0, 0, 0)
-                        $ paraInnerAlignment <<<- ParaInnerAlignment  (0.0, 0.0, 0.0, 0.0)
-                        $ paraInnerPadding <<<- ParaInnerPadding   (0, 0, 0, 0)
-                        $ emptyParams) "Select version range"), emptyParams)
+                    (comboSelectionEditor v2 show, defaultParams)
+                    (versionRangeEditor, ("Shadow", ParaShadow ShadowIn) <<< defaultParams)
+                    (versionRangeEditor, ("Shadow", ParaShadow ShadowIn) <<< defaultParams),
+                        ("Name", ParaString "Complex") <<<
+                        ("Direction", ParaDir Vertical) <<<
+                        ("OuterAlignment", ParaAlign (0.0, 0.0, 0.0, 0.0)) <<<
+                        ("OuterPadding", ParaPadding (0, 0, 0, 0)) <<<
+                        ("InnerAlignment", ParaAlign (0.0, 0.0, 0.0, 0.0)) <<<
+                        ("InnerPadding", ParaPadding (0, 0, 0, 0)) <<<defaultParams)
+                        "Select version range"), defaultParams)
             False "Any Version"
-            (paraDirection <<<- ParaDirection Vertical $ para)
+            (("Direction", ParaDir Vertical) <<< para)
             noti
     let vrinj AnyVersion                =   inj Nothing
         vrinj (ThisVersion v)           =   inj (Just (Left (ThisVersionS,v)))

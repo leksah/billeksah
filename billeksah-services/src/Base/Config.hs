@@ -47,7 +47,6 @@ import qualified Data.Map as Map
        (elems, toList, lookup, member, insert, empty)
 import Data.Map (Map)
 import Base.Graph (topSortGraph)
-import Debug.Trace (trace)
 import Base.State (StateM)
 import Control.Monad.IO.Class (MonadIO(..))
 
@@ -174,7 +173,7 @@ type Error = String
 loadPluginDescription :: FilePath -> (PluginName, VersionBounds) -> IO (Either Plugin Error)
 loadPluginDescription fp (name,bounds) = do
     versions <- getPluginVersions fp name
-    case trace (show versions) $ selectOptimalVersion versions bounds of
+    case selectOptimalVersion versions bounds of
         Nothing -> return (Right ("Can't select version for plugin: " ++ name))
         Just v  -> getPluginDescr fp name v >>= \ p -> return (Left p)
 
@@ -211,7 +210,7 @@ getPluginVersions fp name = catch (do
                         (a,_):_  -> Just a
                         []       -> Nothing) relevantFiles))
     (\e -> do
-        putStrLn "Config>>getPluginVersions: ++ show e"
+--        putStrLn "Config>>getPluginVersions: ++ show e"
         return [])
   where
     extractVersion string = drop (length name + 1) (dropExtension string)
@@ -232,8 +231,7 @@ loadListFromConfig baseEvent fp PluginConfig{cfPlugins = prerequ} = do
                 let map2 = Map.insert name plugin map
                 foldM loadDeep map2 (plPrerequisites plugin)
             Right error -> do
-                (evtTrigger baseEvent) (BaseError $ "Can't load plugin descr " ++ show prerequ
-                     ++ " " ++ error)
+                message Error ("Can't load plugin descr " ++ show prerequ ++ " " ++ error)
                 return map
     buildGraph allPlugs plug graph =
         Map.insert plug

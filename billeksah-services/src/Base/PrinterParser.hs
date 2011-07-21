@@ -67,7 +67,7 @@ type Getter alpha beta = alpha -> beta
 type Setter alpha beta = beta -> alpha -> alpha
 
 -- | A description of a printable and parsable entity
-data FieldDescriptionS alpha =  FDS {
+data FieldDescriptionS alpha =  FieldS {
         fieldName       ::  String,
         fieldPrinter    ::  alpha -> PP.Doc,
         fieldParser     ::  alpha -> CharParser () alpha,
@@ -92,7 +92,7 @@ mkFieldS :: String ->
     (Setter alpha beta) ->
     FieldDescriptionS alpha
 mkFieldS name synopsis printer parser getter setter =
-    FDS name
+    FieldS name
         (\ dat -> (PP.text name PP.<> PP.colon)
                 PP.$$ (PP.nest 15 (printer (getter dat)))
                 PP.$$ (PP.nest 5 (case synopsis of
@@ -268,7 +268,7 @@ writeFields fpath date dateDesc = writeFile fpath (showFields date dateDesc)
 
 showFields ::  alpha  -> [FieldDescriptionS alpha] ->  String
 showFields date dateDesc = PP.render $
-    foldl' (\ doc FDS{fieldPrinter = printer} ->  doc PP.$+$ printer date) PP.empty dateDesc
+    foldl' (\ doc FieldS{fieldPrinter = printer} ->  doc PP.$+$ printer date) PP.empty dateDesc
 
 readFields :: FilePath -> [FieldDescriptionS alpha] -> alpha -> IO alpha
 readFields fn fieldDescrs defaultValue = catch (do

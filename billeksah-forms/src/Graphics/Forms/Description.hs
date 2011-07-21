@@ -1,4 +1,5 @@
-{-# Language EmptyDataDecls, DeriveDataTypeable #-}
+{-# Language EmptyDataDecls, DeriveDataTypeable, ExistentialQuantification,
+    StandaloneDeriving #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.UI.Editor.DescriptionPP
@@ -13,11 +14,10 @@
 --
 -----------------------------------------------------------------------------------
 module Graphics.Forms.Description (
-    FieldDescriptionPP(..)
-,   mkFieldPP
-,   extractFieldDescription
-,   flattenFieldDescriptionPP
-,   flattenFieldDescriptionPPToS
+    FieldDescription(..)
+,   mkField
+,   toFieldDescriptionG
+,   toFieldDescriptionS
 
 ,   formsPluginInterface
 ) where
@@ -25,11 +25,12 @@ module Graphics.Forms.Description (
 import Graphics.Forms.Basics
 import Graphics.Forms.Parameters
 import Graphics.Forms.Build
-import Graphics.Forms.GUIEvent
+import Graphics.Forms.GUIEvent (GtkRegMap(..))
 import Base.State
 import Base.Event
 import Base.PluginTypes
 import Base.PrinterParser hiding (fieldParser)
+import Base.Preferences
 
 import Graphics.UI.Gtk
 import Control.Monad
@@ -37,8 +38,7 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.ParserCombinators.Parsec as P
 import Data.Version (Version(..))
 import Data.Typeable (Typeable)
-import Debug.Trace (trace)
---import IDE.Core.State
+import qualified Data.Map as Map (empty)
 
 -- ----------------------------------------------
 -- * It's a plugin
@@ -59,8 +59,11 @@ formsPluginInterface = do
 --
 
 -- | Nothing interesting so far
-data FormsEvent = FormsEvent
-        deriving (Show, Typeable)
+data FormsEvent =
+    RegisterPrefs [(String, GenFieldDescription)]
+    | PrefsChanged
+    | NeedRestart
+        deriving Typeable
 
 triggerFormsEvent :: FormsEvent -> StateM (FormsEvent)
 triggerFormsEvent = triggerEvent FormsEventSel
@@ -73,25 +76,42 @@ getFormsEvent = getEvent FormsEventSel
 --
 
 formsInit1 :: BaseEvent -> PEvent FormsEvent -> StateM ()
-formsInit1 baseEvent myEvent = trace ("init1 " ++ pluginNameForms) $ do
+formsInit1 baseEvent myEvent = do
+    message Debug ("init1 " ++ pluginNameForms)
     initialRegister
     return ()
 
 formsInit2 :: BaseEvent -> PEvent FormsEvent -> StateM ()
-formsInit2 baseEvent myEvent = trace ("init2 " ++ pluginNameForms) $ return ()
+formsInit2 baseEvent myEvent = do
+    message Debug ("init2 " ++ pluginNameForms)
+    RegisterPrefs allPrefs <- triggerFormsEvent (RegisterPrefs framePrefs)
+    setState PrefsDescrState allPrefs
+    return ()
 
+framePrefs = []
 
-data FieldDescriptionPP alpha =  FDPP {
+initialRegister = do
+    registerState GuiHandlerStateSel (Handlers Map.empty :: Handlers GUIEvent)
+    registerState GtkEventsStateSel (GtkRegMap Map.empty)
+    registerState PrefsDescrState ([] :: [(String,[GenFieldDescription])])
+
+data FieldDescription alpha =  Field {
         fdParameters      ::  Parameters
     ,   fdFieldPrinter    ::  alpha -> PP.Doc
     ,   fdFieldParser     ::  alpha -> P.CharParser () alpha
     ,   fdFieldEditor     ::  alpha -> StateM (Widget, Injector alpha , alpha -> Extractor alpha , GEvent)
     ,   fdApplicator      ::  alpha -> alpha -> StateM ()}
-    | VFDPP Parameters [FieldDescriptionPP alpha] -- ^ Vertical Box
-    | HFDPP Parameters [FieldDescriptionPP alpha] -- ^ Horizontal Box
-    | NFDPP [(String,FieldDescriptionPP alpha)]   -- ^ Notebook
+    | VertBox Parameters [FieldDescription alpha] -- ^ Vertical Box
+    | HoriBox Parameters [FieldDescription alpha] -- ^ Horizontal Box
+    | TabbedBox [(String,FieldDescription alpha)]   -- ^ Notebook
+    deriving (Typeable)
 
-type MkFieldDescriptionPP alpha beta =
+data GenFieldDescription = forall alpha . Typeable alpha => FieldDescription alpha
+
+deriving instance Typeable GenFieldDescription
+
+
+type MkFieldDescription alpha beta =
     Parameters      ->
     (Printer beta)     ->
     (Parser beta)      ->
@@ -99,23 +119,19 @@ type MkFieldDescriptionPP alpha beta =
     (Setter alpha beta)    ->
     (Editor beta)      ->
     (Applicator beta)  ->
-    FieldDescriptionPP alpha
+    FieldDescription alpha
 
-mkFieldPP :: Eq beta => MkFieldDescriptionPP alpha beta
-mkFieldPP parameters printer parser getter setter editor applicator  =
-    let FD _ ed = mkField parameters getter setter editor
-    in FDPP parameters
-        (\ dat -> (PP.text (case getParameterPrim paraName parameters of
-                                    Nothing -> ""
-                                    Just str -> str) PP.<> PP.colon)
+mkField :: Eq beta => MkFieldDescription alpha beta
+mkField parameters printer parser getter setter editor applicator  =
+    let FieldG _ ed = mkFieldG (getParaS "Name" parameters) parameters getter setter editor
+    in Field parameters
+        (\ dat -> (PP.text (getParaS "Name" parameters) PP.<> PP.colon)
                 PP.$$ (PP.nest 15 (printer (getter dat)))
-                PP.$$ (PP.nest 5 (case getParameterPrim paraSynopsis parameters of
-                                    Nothing -> PP.empty
-                                    Just str -> PP.text $"--" ++ str)))
+                PP.$$ (PP.nest 5 (case getPara "Synopsis" parameters of
+                                    ParaString "" -> PP.empty
+                                    ParaString str -> PP.text $"--" ++ str)))
         (\ dat -> P.try (do
-            symbol (case getParameterPrim paraName parameters of
-                                    Nothing -> ""
-                                    Just str -> str)
+            symbol (let ParaString str = getPara "Name" parameters in str)
             colon
             val <- parser
             return (setter val dat)))
@@ -127,26 +143,29 @@ mkFieldPP parameters printer parser getter setter editor applicator  =
                 then return ()
                 else applicator newField)
 
-extractFieldDescription :: FieldDescriptionPP alpha  -> FieldDescription alpha
-extractFieldDescription (VFDPP paras descrs) =  VFD paras (map extractFieldDescription descrs)
-extractFieldDescription (HFDPP paras descrs) =  HFD paras (map extractFieldDescription descrs)
-extractFieldDescription (NFDPP descrsp)      =  NFD (map (\(s,d) ->
-                                                    (s, extractFieldDescription d)) descrsp)
-extractFieldDescription (FDPP parameters fieldPrinter fieldParser fieldEditor applicator) =
-    (FD parameters fieldEditor)
+toFieldDescriptionG :: FieldDescription alpha  -> FieldDescriptionG alpha
+toFieldDescriptionG (VertBox paras descrs) =  VertBoxG paras
+                                                        (map toFieldDescriptionG descrs)
+toFieldDescriptionG (HoriBox paras descrs) =  HoriBoxG paras
+                                                        (map toFieldDescriptionG descrs)
+toFieldDescriptionG (TabbedBox descrsp)    =  TabbedBoxG (map (\(s,d) ->
+                                                    (s, toFieldDescriptionG d)) descrsp)
+toFieldDescriptionG (Field parameters fieldPrinter fieldParser fieldEditor applicator) =
+    (FieldG parameters fieldEditor)
 
-flattenFieldDescriptionPP :: FieldDescriptionPP alpha  -> [FieldDescriptionPP alpha]
-flattenFieldDescriptionPP (VFDPP paras descrs)  =   concatMap flattenFieldDescriptionPP descrs
-flattenFieldDescriptionPP (HFDPP paras descrs)  =   concatMap flattenFieldDescriptionPP descrs
-flattenFieldDescriptionPP (NFDPP descrsp)       =   concatMap (flattenFieldDescriptionPP . snd) descrsp
-flattenFieldDescriptionPP fdpp                  =   [fdpp]
+flattenFieldDescription :: FieldDescription alpha  -> [FieldDescription alpha]
+flattenFieldDescription (VertBox paras descrs)  =   concatMap flattenFieldDescription descrs
+flattenFieldDescription (HoriBox paras descrs)  =   concatMap flattenFieldDescription descrs
+flattenFieldDescription (TabbedBox descrsp)     =   concatMap (flattenFieldDescription . snd) descrsp
+flattenFieldDescription fdpp                  =   [fdpp]
 
-flattenFieldDescriptionPPToS :: FieldDescriptionPP alpha -> [FieldDescriptionS alpha]
-flattenFieldDescriptionPPToS = map ppToS . flattenFieldDescriptionPP
+toFieldDescriptionS :: FieldDescription alpha -> [FieldDescriptionS alpha]
+toFieldDescriptionS = map ppToS . flattenFieldDescription
 
 
-ppToS :: FieldDescriptionPP alpha -> FieldDescriptionS alpha
-ppToS (FDPP para print pars _ _) = FDS (getParameter paraName para) print pars
-                                       (Just (getParameter paraSynopsis para))
-ppToS _                          = error "DescriptionPP.ppToS Can't transform"
+ppToS :: FieldDescription alpha -> FieldDescriptionS alpha
+ppToS (Field para print pars _ _) =
+    FieldS (let ParaString str = getPara "Name" para in str) print pars
+                                    (Just (let ParaString str = getPara "Synopsis" para in str))
+ppToS _                           = error "DescriptionPP.ppToS Can't transform"
 

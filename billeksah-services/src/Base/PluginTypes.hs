@@ -25,12 +25,16 @@ import Data.Typeable (cast, Typeable)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.IORef (newIORef)
 import qualified Data.Map as Map (empty)
+import Control.Monad (when)
 
 -- | The type of event this base component can trigger
 
+data MessageLevel = Debug | Info | Warning | Error
+    deriving(Eq,Ord,Show,Read, Typeable)
+
 type BaseEvent = PEvent BaseEventValue
 
-data BaseEventValue = StartUp | BaseError String
+data BaseEventValue = StartUp | BaseLog MessageLevel String
     deriving Typeable
 
 data PluginInterface event =
@@ -87,7 +91,7 @@ type Prerequisite  = (PluginName, VersionBounds)
 
 type LoadList      = [Plugin]
 
-data MainSelector = MainEventSel | ConfigPathSel
+data MainSelector = MainEventSel | ConfigPathSel | MessageLevelSel
     deriving (Eq,Ord,Show,Typeable)
 
 instance Selector MainSelector
@@ -109,3 +113,26 @@ getCurrentConfigPath = getState ConfigPathSel
 
 registerCurrentConfigPath :: FilePath -> StateM (Maybe String)
 registerCurrentConfigPath = registerState ConfigPathSel
+
+setMessageLevel :: MessageLevel -> StateM ()
+setMessageLevel =  setState MessageLevelSel
+
+getMessageLevel :: StateM MessageLevel
+getMessageLevel = getState MessageLevelSel
+
+registerMessageLevel :: MessageLevel -> StateM (Maybe String)
+registerMessageLevel = registerState MessageLevelSel
+
+--
+-- | Outputs a message. Triggers the BaseEvent BaseLog, which is in this
+-- package handled to ~BaseLog level str -> liftIO $ putStrLn (show level ++ " " ++ str)~
+message :: MessageLevel -> String -> StateM ()
+message level str = do
+    fromLevel <- getMessageLevel
+    when (level >= fromLevel) $ do
+        triggerBaseEvent (BaseLog level str) >> return ()
+
+
+messageR :: MessageLevel -> String -> StateRef -> IO ()
+messageR level str = reflectState (message level str)
+

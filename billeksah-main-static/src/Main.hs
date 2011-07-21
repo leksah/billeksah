@@ -28,7 +28,8 @@ import Base.Plugin
 
 
 import System.Console.GetOpt
-       (OptDescr, usageInfo, ArgOrder(..), getOpt)
+       (ArgDescr(..), OptDescr(..), OptDescr, usageInfo, ArgOrder(..),
+        getOpt)
 import System.Environment (getArgs)
 import System.FilePath (dropFileName)
 import Data.IORef (newIORef)
@@ -37,16 +38,11 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.Map (Map)
 import Data.Typeable (Typeable)
 import Leksah.Dummy (dummyPluginInterface)
-
-
-data Flag
-
-header :: String
-header = "Usage: billeksah-main-static [OPTION...] pluginConfig"
-
-options :: [OptDescr Flag]
-options = []
-
+import Data.Foldable (find)
+import Control.Monad (when)
+import Data.Version (showVersion)
+import System.Exit (exitSuccess)
+import Paths_billeksah_main_static
 
 pluginTable :: Map String GenInterfaceM
 pluginTable = Map.fromList [
@@ -55,6 +51,29 @@ pluginTable = Map.fromList [
     ("leksah-main", GenInterfaceM leksahPluginInterface),
     ("leksah-plugin-pane", GenInterfaceM pluginPanePluginInterface),
     ("leksah-dummy", GenInterfaceM dummyPluginInterface)]
+
+
+
+data Flag =    Help
+             | Version
+             | Verbosity String
+       deriving (Show,Eq)
+
+options :: [OptDescr Flag]
+
+options =   [
+             Option ['e'] ["verbosity"] (ReqArg Verbosity "Verbosity")
+                "One of Debug, Info, Warning, Error"
+
+         ,   Option ['v'] ["version"] (NoArg Version)
+                "Show the version number of plugin system"
+         ,   Option ['h'] ["help"] (NoArg Help)
+                "Display command line options"]
+
+
+header :: String
+header = "Usage: billeksah-base [OPTION...] pluginConfig"
+
 
 getOpts :: [String] -> IO ([Flag], [String])
 getOpts argv =
@@ -65,20 +84,34 @@ getOpts argv =
 main = do
     args             <- getArgs
     (o,files)        <- getOpts args
+    let verbosity'   =  case find (\x -> case x of
+                                            Verbosity s -> True
+                                            _           -> False) o of
+                            Nothing            -> Info
+                            Just (Verbosity v) -> read v
+
+    when (elem Version o) $ do
+        putStrLn $ "billeksah-base, version " ++ showVersion version
+        exitSuccess
+    when (elem Help o) $ do
+        putStrLn $ "billeksah-base plugin system, " ++ usageInfo header options
+        exitSuccess
+
     let pluginCPath  =  case files of
                             i:_ -> i
                             _   -> error "Required arg missing: pluginConfig"
         pluginPath   =  dropFileName pluginCPath
     config       <- loadPluginConfig pluginCPath
     runState (do
+        registerMessageLevel verbosity'
         baseEvent    <- makeEvent MainEventSel
         registerEvent'  baseEvent (\ e -> case e of
-                                            BaseError str -> liftIO $ putStrLn ("billeksah-base error: " ++ str)
+                                            BaseLog level str -> liftIO $ putStrLn (show level ++ " " ++ str)
                                             otherwise -> return ())
         res <- registerCurrentConfigPath pluginCPath
         case res of
             Nothing -> return ()
-            Just str -> triggerBaseEvent (BaseError str) >> return ()
+            Just str -> message Error str
 
         --  loadListFromConfig first collect all needed plugins, and then
         --  sort the list, so that for every plugin, its prerequisites precede them in the list

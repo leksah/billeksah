@@ -19,6 +19,7 @@
 module Graphics.Session (
     saveSession
 ,   recoverSession
+,   asRegisterType
 ) where
 
 import Base
@@ -38,11 +39,13 @@ import qualified Data.Map as Map
 import qualified Text.PrettyPrint as PP (text)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time (getTimeZone, utcToLocalTime)
-import Debug.Trace (trace)
 import Data.Typeable (Typeable, cast)
 
 ------------------------------------------------------------------------
 -- * Interface
+
+asRegisterType :: forall alpha. Pane alpha => alpha -> (String,GenPane)
+asRegisterType p = (paneType p, PaneC p)
 
 --
 -- | Retrieves a string with all session information
@@ -316,12 +319,12 @@ populate = mapM_ (\ (typeString,mbPs,pp) -> do
     case mbPs of
         Nothing -> return ()
         Just s ->  let mbTypeHint = case [pt | (ps,pt) <- paneTypes, ps == typeString] of
-                            [th] -> Just th
-                            [] -> trace ("Type not found: " ++ typeString) $ Nothing
-                            l -> trace ("Type not unique: " ++ typeString) $ Nothing
+                            [th] -> Left th
+                            [] -> Right ("Type not found: " ++ typeString)
+                            l -> Right ("Type not unique: " ++ typeString)
                   in case mbTypeHint of
-                    Nothing -> return ()
-                    Just (PaneC gth) -> populate' gth s pp >> return ())
+                    Right str -> message Error str
+                    Left (PaneC gth) -> populate' gth s pp >> return ())
 
 populate' :: forall alpha . Pane alpha =>  alpha  -> String -> PanePath -> StateM ()
 populate' _ readString panePath = do
@@ -349,7 +352,7 @@ applyExtension :: [GenSessionExtension] -> (String,String) -> StateM ()
 applyExtension genList (name,readString) =
     case findExtension name genList of
         Nothing                                                    ->
-            trace ("Session>>applyExtension: Extension not found: " ++ name) $ return ()
+            message Error ("Session>>applyExtension: Extension not found: " ++ name)
         Just (GenS (SessionExtension {seApplicator = applicator})) -> do
             let val = read readString
             applicator val
