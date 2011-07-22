@@ -7,7 +7,8 @@
     FlexibleInstances,
     ScopedTypeVariables,
     FlexibleContexts,
-    CPP#-}
+    CPP,
+    TypeFamilies #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Frame
@@ -43,6 +44,7 @@ module Graphics.Frame (
 
 -- * Events
 ,   FrameEvent(..)
+,   FrameEventSel(..)
 ,   triggerFrameEvent
 ,   getFrameEvent
 ,   registerFrameEvent
@@ -133,6 +135,14 @@ trace a b = b
 -- ----------------------------------
 -- * Events
 --
+data FrameEventSel = FrameEventSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector FrameEventSel where
+    type ValueType FrameEventSel = PEvent FrameEvent
+
+instance EventSelector FrameEventSel where
+    type BaseType FrameEventSel = FrameEvent
 
 --
 -- | Events the gui frame triggers
@@ -251,6 +261,13 @@ setStatusbar    = setThis (\st value -> st{fsStatusbar = value})
 --
 -- | The handling of the state of the frame
 --
+
+data FrameStateSel = FrameStateSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector FrameStateSel where
+    type ValueType FrameStateSel = FrameState
+
 
 registerFrameState :: FrameState -> StateM (Maybe String)
 registerFrameState = registerState FrameStateSel

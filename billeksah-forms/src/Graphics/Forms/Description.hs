@@ -1,5 +1,5 @@
 {-# Language EmptyDataDecls, DeriveDataTypeable, ExistentialQuantification,
-    StandaloneDeriving #-}
+    StandaloneDeriving, TypeFamilies #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.UI.Editor.DescriptionPP
@@ -25,12 +25,8 @@ module Graphics.Forms.Description (
 import Graphics.Forms.Basics
 import Graphics.Forms.Parameters
 import Graphics.Forms.Build
-import Graphics.Forms.GUIEvent (GtkRegMap(..))
-import Base.State
-import Base.Event
-import Base.PluginTypes
-import Base.PrinterParser hiding (fieldParser)
-import Base.Preferences
+import Graphics.Forms.GUIEvent
+import Base
 
 import Graphics.UI.Gtk
 import Control.Monad
@@ -60,10 +56,20 @@ formsPluginInterface = do
 
 -- | Nothing interesting so far
 data FormsEvent =
-    RegisterPrefs [(String, GenFieldDescription)]
+    RegisterPrefs [(String, [GenFieldDescription])]
     | PrefsChanged
     | NeedRestart
         deriving Typeable
+
+data FormsEventSel = FormsEventSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector FormsEventSel where
+    type ValueType FormsEventSel = PEvent FormsEvent
+
+instance EventSelector FormsEventSel where
+    type BaseType FormsEventSel = FormsEvent
+
 
 triggerFormsEvent :: FormsEvent -> StateM (FormsEvent)
 triggerFormsEvent = triggerEvent FormsEventSel
@@ -74,6 +80,12 @@ getFormsEvent = getEvent FormsEventSel
 -- -----------------------------------------------
 -- * Initialization
 --
+
+data PrefsDescrState = PrefsDescrState
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector PrefsDescrState where
+    type ValueType PrefsDescrState = [(String, [GenFieldDescription])]
 
 formsInit1 :: BaseEvent -> PEvent FormsEvent -> StateM ()
 formsInit1 baseEvent myEvent = do
@@ -91,9 +103,9 @@ formsInit2 baseEvent myEvent = do
 framePrefs = []
 
 initialRegister = do
-    registerState GuiHandlerStateSel (Handlers Map.empty :: Handlers GUIEvent)
+    registerState GuiHandlerStateSel (Handlers Map.empty)
     registerState GtkEventsStateSel (GtkRegMap Map.empty)
-    registerState PrefsDescrState ([] :: [(String,[GenFieldDescription])])
+    registerState PrefsDescrState []
 
 data FieldDescription alpha =  Field {
         fdParameters      ::  Parameters
@@ -104,12 +116,8 @@ data FieldDescription alpha =  Field {
     | VertBox Parameters [FieldDescription alpha] -- ^ Vertical Box
     | HoriBox Parameters [FieldDescription alpha] -- ^ Horizontal Box
     | TabbedBox [(String,FieldDescription alpha)]   -- ^ Notebook
-    deriving (Typeable)
 
-data GenFieldDescription = forall alpha . Typeable alpha => FieldDescription alpha
-
-deriving instance Typeable GenFieldDescription
-
+data GenFieldDescription = forall alpha . FieldDescription alpha
 
 type MkFieldDescription alpha beta =
     Parameters      ->

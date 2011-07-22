@@ -1,6 +1,6 @@
 {-# Language MultiParamTypeClasses, ScopedTypeVariables, FlexibleContexts, RankNTypes,
     ExistentialQuantification, DeriveDataTypeable, StandaloneDeriving, TypeSynonymInstances,
-    FlexibleInstances #-}
+    FlexibleInstances, TypeFamilies #-}
 
 -----------------------------------------------------------------------------
 --
@@ -24,6 +24,8 @@ module Graphics.Forms.GUIEvent (
 ,   Connection(..)
 ,   Connections
 ,   GtkRegMap(..)
+,   GuiHandlerStateSel(..)
+,   GtkEventsStateSel(..)
 
 ,   activateGUIEvent
 ,   activateGUIEvent'
@@ -38,7 +40,7 @@ module Graphics.Forms.GUIEvent (
 import Base
 import Graphics.Pane
 import Graphics.Forms.Basics
-       (PaneSelector(..), GUIEventSelector(..), GUIEvent(..), GEvent,
+       (GUIEventSelector(..), GUIEvent(..), GEvent,
         pluginNameForms)
 
 
@@ -51,9 +53,8 @@ import Control.Monad
 import Data.Map (Map(..))
 import qualified Data.Map as Map  (delete,insert,lookup,empty)
 import Data.Maybe (isJust,fromJust)
-import Unsafe.Coerce (unsafeCoerce)
 import Control.Arrow (first)
-import Data.Typeable (Typeable1, Typeable)
+import Data.Typeable (Typeable)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader.Class (MonadReader(..))
 
@@ -85,13 +86,25 @@ type GUIEventReg =  ([Connection],Map Unique [(Unique,GUIEvent)])
 -- | The event state regarding to gtk
 --
 newtype GtkRegMap =  GtkRegMap (Map EvtID (Map GUIEventSelector GUIEventReg))
-    deriving Typeable
+
+data GuiHandlerStateSel = GuiHandlerStateSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector GuiHandlerStateSel where
+    type ValueType GuiHandlerStateSel = Handlers GUIEvent
+
 
 -- | All gui events share the same map
 guiEventFactory :: EventFactory GUIEvent (Handlers GUIEvent)
 guiEventFactory = EventFactory {
         efGetHandlers = getState GuiHandlerStateSel,
         efSetHandlers = setState GuiHandlerStateSel}
+
+data GtkEventsStateSel = GtkEventsStateSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector GtkEventsStateSel where
+    type ValueType GtkEventsStateSel = GtkRegMap
 
 getGtkHandlers :: StateM GtkRegMap
 getGtkHandlers = getState GtkEventsStateSel
@@ -108,7 +121,7 @@ withGtkHandlers = withState GtkEventsStateSel
 makeGUIEvent :: StateM (PEvent GUIEvent)
 makeGUIEvent = do
     let ef           =  guiEventFactory
-    ev <- mkEvent ef
+    ev <- mkEvent (undefined :: GUIEventSelector) ef
     withState GuiHandlerStateSel (\ (Handlers handlerMap :: Handlers GUIEvent) ->
         case Map.lookup (evtID ev) handlerMap of
                 Just [] -> error "Events>>makeGUIEvent: Event already known"

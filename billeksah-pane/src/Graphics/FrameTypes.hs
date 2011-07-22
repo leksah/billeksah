@@ -21,7 +21,6 @@ module Graphics.FrameTypes (
 ,   ActionType(..)
 ,   MenuPosition(..)
 ,   ToolPosition(..)
-,   FrameSelector(..)
 ,   SessionExtension(..)
 ,   GenSessionExtension(..)
 ,   CompDescr(..)
@@ -33,17 +32,9 @@ module Graphics.FrameTypes (
 import Base
 
 import Graphics.UI.Gtk
-import Data.Typeable
-       (TypeRep(..), typeRepKey, cast, Typeable(..))
 import Data.Maybe (fromJust)
-import System.IO.Unsafe (unsafePerformIO)
 
 panePluginName = "billeksah-pane"
-
-data FrameSelector = FrameEventSel | PaneActiveSens | FrameStateSel | ActionStateSel
-    deriving (Eq, Ord, Show, Typeable)
-
-instance Selector FrameSelector
 
 ---------------------------------------------------------------------------------------
 -- * Types for Actions, Menus, Toolbars

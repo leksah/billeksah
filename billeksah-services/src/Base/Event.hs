@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, DeriveDataTypeable, StandaloneDeriving, TypeSynonymInstances,
-    FlexibleInstances, ExistentialQuantification, FlexibleContexts #-}
+    FlexibleInstances, ExistentialQuantification, FlexibleContexts, TypeFamilies #-}
 
 -----------------------------------------------------------------------------
 --
@@ -34,6 +34,7 @@ module Base.Event (
     HandlerID,
     PEvent(..),
     EventFactory(..),
+    EventSelector(..),
 
 -- * Low level interface
     stdEventFactory,
@@ -52,13 +53,14 @@ import qualified Data.Map as Map (empty, insert, lookup)
 import Control.Monad (foldM)
 import Data.IORef (newIORef, writeIORef, readIORef, IORef)
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Typeable (typeRepKey, Typeable(..), cast, Typeable)
 import Data.Maybe (fromJust)
-import System.IO.Unsafe (unsafePerformIO)
 
 --   ---------------------------------
 --  Types
 --
+
+class Selector alpha => EventSelector alpha where
+    type BaseType alpha :: *
 
 --
 -- | A handler is a callback function
@@ -77,19 +79,17 @@ data PEvent event = PEvent {
     evtUnregister  :: HandlerID -> StateM (),
     evtTrigger     :: event -> StateM event,
     evtID          :: EvtID}
-        deriving Typeable
+
 
 --
 -- | A boxed type for events
 --
-data GenEvent =  forall event. Typeable event => GenEvent event
-    deriving Typeable
+data GenEvent =  forall event. GenEvent event
 
 --
 -- | The implementation type
 --
 newtype Handlers event = Handlers (Map EvtID [(HandlerID, event  -> StateM event)])
-    deriving Typeable
 
 --
 -- | The provider of low level state mechanism
@@ -105,24 +105,25 @@ data EventFactory event handlers = EventFactory {
 --
 -- | Constructs a new event. The plugin name has to be unique!
 --
-makeEvent :: (Selector alpha, Typeable beta) => alpha -> StateM (PEvent beta)
+makeEvent :: (EventSelector alpha,ValueType alpha ~  PEvent (BaseType alpha))
+                => alpha -> StateM (ValueType alpha)
 makeEvent selector = do
     ideRef           <- liftIO $ newIORef (Handlers Map.empty)
-    let ef           =  stdEventFactory ideRef
-    ev <- mkEvent ef
+    let ef           =  stdEventFactory selector ideRef
+    ev <- mkEvent selector ef
     persistEvent selector ev
     return ev
+
+persistEvent :: Selector alpha =>  alpha -> ValueType alpha -> StateM ()
+persistEvent key event =
+     registerState  key event >> return ()
 
 --
 -- | Get the event from a plugin name (The type has to fit, otherwise
 --  an error will be thrown).
 --
-getEvent :: (Selector alpha, Typeable beta) => alpha -> StateM (PEvent beta)
-getEvent sel = do
-    (GenEvent e) <- getGEvent sel
-    case cast e of
-        Just v -> return v
-        Nothing -> error ("PluginTypes>>getEvent: Can't cast event " ++ show sel)
+getEvent :: Selector alpha => alpha -> StateM (ValueType alpha)
+getEvent = getState
 
 --
 -- | Registers an event handler for this event
@@ -145,13 +146,14 @@ registerEvent' event handler = do
 --
 -- | Triggers the event with the provided value
 --
-triggerEvent :: (Selector alpha, Typeable beta) => alpha  -> beta -> StateM beta
+triggerEvent :: (EventSelector alpha, ValueType alpha ~  PEvent (BaseType alpha))
+                        => alpha  -> BaseType alpha  -> StateM (BaseType alpha)
 triggerEvent sel e = getEvent sel >>= \ event -> (evtTrigger event) e
 
 --
 -- | Merge two event streams of the same type
 --
-unionEvent :: Typeable event => PEvent event  -> PEvent event  -> StateM (PEvent event )
+unionEvent :: PEvent event  -> PEvent event  -> StateM (PEvent event )
 unionEvent e1 e2 = do
     newEvtID <- newEventID
     return $ PEvent {
@@ -169,7 +171,7 @@ unionEvent e1 e2 = do
 --
 -- | Allow all events that fulfill the predicate, discard the rest. Think of it as
 --
-filterEvent :: Typeable e =>  (e -> Bool) -> PEvent e -> StateM (PEvent e)
+filterEvent :: (e -> Bool) -> PEvent e -> StateM (PEvent e)
 filterEvent filterFunc event = do
     newEvtID <- newEventID
     return $ PEvent {
@@ -187,11 +189,11 @@ filterEvent filterFunc event = do
 --
 -- | Propagate event ...
 --
-propagateEvent :: Typeable e =>  PEvent e -> [PEvent e] -> StateM ()
+propagateEvent :: PEvent e -> [PEvent e] -> StateM ()
 propagateEvent to fromList =
     mapM_ (\ from -> registerEvent from (\e -> (evtTrigger to) e)) fromList
 
-retriggerEvent :: Typeable e =>  PEvent e -> (e -> Maybe e) -> StateM ()
+retriggerEvent :: PEvent e -> (e -> Maybe e) -> StateM ()
 retriggerEvent event trans =
     registerEvent event (\e -> case trans e of
                                     Nothing -> return e
@@ -201,8 +203,9 @@ retriggerEvent event trans =
 --  Low level implementation
 --
 
-stdEventFactory :: Typeable event => IORef (Handlers event) -> EventFactory event (Handlers event)
-stdEventFactory handlersRef = EventFactory {
+stdEventFactory :: EventSelector sel =>
+    sel -> IORef (Handlers (BaseType sel)) -> EventFactory (BaseType sel) (Handlers (BaseType sel))
+stdEventFactory _ handlersRef = EventFactory {
         efGetHandlers = liftIO $ readIORef handlersRef,
         efSetHandlers = \ nh -> liftIO $ writeIORef handlersRef nh}
 
@@ -211,9 +214,9 @@ newEventID = liftIO $ newUnique
 --
 -- | Make an PEvent in the IO Monad
 --
-mkEvent :: (Typeable event) =>
-                EventFactory event (Handlers event) -> StateM (PEvent event)
-mkEvent ef@EventFactory{efGetHandlers = getHandlers, efSetHandlers = setHandlers} = do
+mkEvent :: (EventSelector alpha, ValueType alpha ~  PEvent (BaseType alpha)) => alpha ->
+                EventFactory (BaseType alpha) (Handlers (BaseType alpha)) -> StateM (ValueType alpha)
+mkEvent _ ef@EventFactory{efGetHandlers = getHandlers, efSetHandlers = setHandlers} = do
     newEvtID <- newEventID
     return $ PEvent {
         evtRegister     = \ handler newUni -> do
@@ -237,12 +240,8 @@ mkEvent ef@EventFactory{efGetHandlers = getHandlers, efSetHandlers = setHandlers
                 Just l      ->  foldM (\ e (_,ah) -> ah e) event (reverse l),
         evtID           = newEvtID}
 
-getGEvent :: Selector alpha => alpha -> StateM GenEvent
-getGEvent key = getState key
 
-persistEvent :: (Selector alpha, Typeable beta) =>  alpha -> PEvent beta -> StateM ()
-persistEvent key event =
-     registerState  key (GenEvent event) >> return ()
+
 
 
 

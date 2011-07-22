@@ -1,4 +1,4 @@
-{-# Language ExistentialQuantification #-}
+{-# Language ExistentialQuantification, TypeFamilies, DeriveDataTypeable #-}
 
 -----------------------------------------------------------------------------
 --
@@ -25,15 +25,26 @@ module Graphics.Forms.Parameters (
     Parameters
 ) where
 
+import Base
+import Graphics.Pane (Direction)
+import Graphics.Panes (Direction(..))
+
+import Graphics.UI.Gtk (Packing, ShadowType)
+import Graphics.UI.Gtk.General.Enums (Packing(..), ShadowType(..))
 import Data.Maybe
 import qualified Data.List as List
-import Graphics.Pane (Direction)
-import Graphics.UI.Gtk (Packing, ShadowType)
-import Graphics.Panes (Direction(..))
-import Graphics.UI.Gtk.General.Enums (Packing(..), ShadowType(..))
+import Data.Typeable (Typeable)
 
+-- ParaName "Hallo" <<< defaultParams
+--          selector
+
+-- setPara :: Selector alpha => alpha => (ValueType alpha) => Parameters -> Parameters
 
 type Parameters = [Para ParaType]
+
+-- type Parameters = forall alpha . (Selector alpha) [(alpha, ValueType alpha)]
+
+
 
 -- | A generalised attribute with independent get and set types.
 data Para alpha = Para
@@ -59,7 +70,14 @@ getParaS name paras = case getPara name paras of
                     ParaString s -> s
                     otherwise -> error "Parameters>>Not a string"
 
-data ParaType =
+data StringSel = Name | StockId | Synopsis
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector StringSel where
+    type ValueType StringSel = String
+
+
+data ParaType  =
     ParaString String
     | ParaAlign (Float,Float,Float,Float)
     | ParaPadding (Int,Int,Int,Int)
@@ -74,6 +92,13 @@ data ParaType =
 
 data HorizontalAlign =   StartHorizontal | StopHorizontal | Keep
     deriving (Eq,Show)
+
+--data StringPara = ParaName | ParaStockId | ParaSynopsis
+--    deriving (Eq,Ord,Show,Typeable)
+--
+--instance Selector StringPara where
+--    type ValueType = String
+--
 
 
 defaultParams :: Parameters

@@ -1,5 +1,5 @@
 {-# Language MultiParamTypeClasses, ScopedTypeVariables, FlexibleContexts, RankNTypes,
-    ExistentialQuantification, DeriveDataTypeable #-}
+    ExistentialQuantification, DeriveDataTypeable, TypeFamilies #-}
 
 -----------------------------------------------------------------------------
 --
@@ -28,7 +28,6 @@ module Graphics.Forms.Basics (
 ,   GUIEventSelector(..)
 ,   GEvent
 ,   GenSelection(..)
-,   PaneSelector(..)
 ,   genericGUIEvents
 ,   allGUIEvents
 
@@ -47,17 +46,12 @@ import Control.Monad
 import Data.Map (Map(..))
 import qualified Data.Map as Map  (delete,insert,lookup,empty)
 import Data.Maybe (isJust,fromJust)
-import Unsafe.Coerce (unsafeCoerce)
 import Control.Arrow (first)
 import Base.MyMissing (allOf)
 import Data.Typeable (Typeable)
 
 pluginNameForms = "billeksah-forms"
 
-data PaneSelector = GuiHandlerStateSel | GtkEventsStateSel | PrefsDescrState | FormsEventSel
-    deriving (Eq, Ord, Show, Typeable)
-
-instance Selector PaneSelector
 
 -- ---------------------------------------------------------------------
 -- * Basic Types
@@ -114,7 +108,13 @@ data GUIEventSelector = FocusOut        -- ^ generic, the widget looses the focu
                     |   ValidationError -- ^ validation of a contents has failed
                     |   Selection
                     |   Dummy
-    deriving (Eq,Ord,Typeable, Bounded, Enum)
+    deriving (Eq,Ord,Show,Bounded, Typeable, Enum)
+
+instance Selector GUIEventSelector where
+    type ValueType GUIEventSelector = PEvent GUIEvent
+
+instance EventSelector GUIEventSelector where
+    type BaseType GUIEventSelector = GUIEvent
 
 data GenSelection = forall alpha . Typeable alpha => GenSelection alpha
 

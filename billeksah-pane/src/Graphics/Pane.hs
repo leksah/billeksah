@@ -1,4 +1,4 @@
-{-# Language CPP, TypeFamilies, RankNTypes #-}
+{-# Language CPP, TypeFamilies, RankNTypes, DeriveDataTypeable #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Pane
@@ -36,6 +36,7 @@ import Data.Version (Version(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Concurrent (yield)
 import Control.Monad (when)
+import Data.Typeable (Typeable)
 
 -- -----------------------------------------------------------
 -- * It's a plugin
@@ -81,6 +82,12 @@ frameInit2 baseEvent myEvent = do
                                     setStatusText "SBActivePane" ""
             _                -> return ())
     return ()
+
+data PaneActiveSens = PaneActiveSens
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector PaneActiveSens where
+    type ValueType PaneActiveSens = Bool
 
 
 --

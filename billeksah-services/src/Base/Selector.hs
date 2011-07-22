@@ -16,7 +16,7 @@
 -----------------------------------------------------------------------------
 
 module Base.Selector (
-    Selector,
+    Selector(..),
     GenSelector(..),
 
 ) where
@@ -29,14 +29,12 @@ import System.IO.Unsafe (unsafePerformIO)
 ---- | A type family for unique selectors
 ----
 class (Eq alpha, Ord alpha, Show alpha, Typeable alpha) => Selector alpha where
-    data ValueType alpha :: *
-
+    type ValueType alpha :: *
 
 --
 -- | Boxing for selectors
 --
-data GenSelector = forall alpha . (Selector alpha) =>  GS alpha
-    deriving (Typeable)
+data GenSelector = forall alpha . Selector alpha =>  GS alpha
 
 deriving instance Show GenSelector
 

@@ -104,7 +104,7 @@ main = do
     config       <- loadPluginConfig pluginCPath
     runState (do
         registerMessageLevel verbosity'
-        baseEvent    <- makeEvent MainEventSel
+        baseEvent    <- makeEvent BaseEventSel
         registerEvent'  baseEvent (\ e -> case e of
                                             BaseLog level str -> liftIO $ putStrLn (show level ++ " " ++ str)
                                             otherwise -> return ())

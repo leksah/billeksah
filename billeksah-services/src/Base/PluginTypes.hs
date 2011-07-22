@@ -1,4 +1,5 @@
-{-# Language DeriveDataTypeable, ExistentialQuantification, RankNTypes, FlexibleContexts #-}
+{-# Language DeriveDataTypeable, ExistentialQuantification, RankNTypes, FlexibleContexts,
+    TypeFamilies #-}
 
 -----------------------------------------------------------------------------
 --
@@ -21,7 +22,7 @@ import Base.State
 import Base.Selector
 
 import Data.Version (showVersion, Version(..))
-import Data.Typeable (cast, Typeable)
+import Data.Typeable (Typeable)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.IORef (newIORef)
 import qualified Data.Map as Map (empty)
@@ -30,12 +31,11 @@ import Control.Monad (when)
 -- | The type of event this base component can trigger
 
 data MessageLevel = Debug | Info | Warning | Error
-    deriving(Eq,Ord,Show,Read, Typeable)
+    deriving(Eq,Ord,Show,Read)
 
 type BaseEvent = PEvent BaseEventValue
 
 data BaseEventValue = StartUp | BaseLog MessageLevel String
-    deriving Typeable
 
 data PluginInterface event =
     PluginInterface {
@@ -44,10 +44,8 @@ data PluginInterface event =
         piEvent   :: PEvent event,
         piName    :: String,
         piVersion :: Version}
-        deriving Typeable
 
 data GenInterfaceM = forall alpha . GenInterfaceM (StateM (PluginInterface alpha))
-    deriving Typeable
 
 data GenInterface = forall event . GenInterface (PluginInterface event)
 
@@ -91,19 +89,31 @@ type Prerequisite  = (PluginName, VersionBounds)
 
 type LoadList      = [Plugin]
 
-data MainSelector = MainEventSel | ConfigPathSel | MessageLevelSel
+data BaseEventSel = BaseEventSel
     deriving (Eq,Ord,Show,Typeable)
 
-instance Selector MainSelector
+instance Selector BaseEventSel where
+    type ValueType BaseEventSel = PEvent BaseEventValue
+
+instance EventSelector BaseEventSel where
+    type BaseType BaseEventSel = BaseEventValue
+
+-- | ConfigPathSel | MessageLevelSel
 
 triggerBaseEvent :: BaseEventValue -> StateM(BaseEventValue)
-triggerBaseEvent = triggerEvent MainEventSel
+triggerBaseEvent = triggerEvent BaseEventSel
 
 getBaseEvent :: StateM (BaseEvent)
-getBaseEvent = getEvent MainEventSel
+getBaseEvent = getEvent BaseEventSel
 
 registerBaseEvent :: Handler BaseEventValue -> StateM HandlerID
 registerBaseEvent handler = getBaseEvent >>= \e -> registerEvent e handler
+
+data ConfigPathSel = ConfigPathSel
+    deriving (Eq,Ord,Show,Typeable)
+
+instance Selector ConfigPathSel where
+    type ValueType ConfigPathSel = FilePath
 
 setCurrentConfigPath :: FilePath -> StateM ()
 setCurrentConfigPath =  setState ConfigPathSel
@@ -113,6 +123,12 @@ getCurrentConfigPath = getState ConfigPathSel
 
 registerCurrentConfigPath :: FilePath -> StateM (Maybe String)
 registerCurrentConfigPath = registerState ConfigPathSel
+
+data MessageLevelSel = MessageLevelSel
+    deriving (Eq,Ord,Show,Read,Typeable)
+
+instance Selector MessageLevelSel where
+    type ValueType MessageLevelSel = MessageLevel
 
 setMessageLevel :: MessageLevel -> StateM ()
 setMessageLevel =  setState MessageLevelSel

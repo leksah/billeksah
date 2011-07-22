@@ -39,7 +39,6 @@ import qualified Data.Map as Map
 import qualified Text.PrettyPrint as PP (text)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time (getTimeZone, utcToLocalTime)
-import Data.Typeable (Typeable, cast)
 
 ------------------------------------------------------------------------
 -- * Interface

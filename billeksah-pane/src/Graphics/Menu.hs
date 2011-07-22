@@ -1,4 +1,5 @@
--- {-# Language  #-}
+{-# Language TypeFamilies, DeriveDataTypeable #-}
+
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Menu
@@ -47,6 +48,12 @@ import Data.Maybe (fromJust, mapMaybe, catMaybes)
 -- * The handling of the state of the frame
 --
 type ActionState = Map GenSelector [String]
+
+data ActionStateSel = ActionStateSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector ActionStateSel where
+    type ValueType ActionStateSel = ActionState
 
 registerActionState :: ActionState -> StateM (Maybe String)
 registerActionState = registerState ActionStateSel
