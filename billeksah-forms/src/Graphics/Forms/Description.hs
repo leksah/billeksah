@@ -15,6 +15,7 @@
 -----------------------------------------------------------------------------------
 module Graphics.Forms.Description (
     FieldDescription(..)
+,   GenFieldDescription
 ,   mkField
 ,   toFieldDescriptionG
 ,   toFieldDescriptionS
@@ -35,6 +36,9 @@ import qualified Text.ParserCombinators.Parsec as P
 import Data.Version (Version(..))
 import Data.Typeable (Typeable)
 import qualified Data.Map as Map (empty)
+import Base.Preferences
+       (FieldDescription(..), FieldDescription, GenFieldDescription,
+        validatePrefs)
 
 -- ----------------------------------------------
 -- * It's a plugin
@@ -93,31 +97,24 @@ formsInit1 baseEvent myEvent = do
     initialRegister
     return ()
 
+framePrefs = []
+
 formsInit2 :: BaseEvent -> PEvent FormsEvent -> StateM ()
 formsInit2 baseEvent myEvent = do
     message Debug ("init2 " ++ pluginNameForms)
     RegisterPrefs allPrefs <- triggerFormsEvent (RegisterPrefs framePrefs)
+    case validatePrefs allPrefs of
+        Nothing -> return ()
+        Just str -> error $ "Description>>formsInit2::"++ str
     setState PrefsDescrState allPrefs
     return ()
 
-framePrefs = []
 
 initialRegister = do
     registerState GuiHandlerStateSel (Handlers Map.empty)
     registerState GtkEventsStateSel (GtkRegMap Map.empty)
     registerState PrefsDescrState []
 
-data FieldDescription alpha =  Field {
-        fdParameters      ::  Parameters
-    ,   fdFieldPrinter    ::  alpha -> PP.Doc
-    ,   fdFieldParser     ::  alpha -> P.CharParser () alpha
-    ,   fdFieldEditor     ::  alpha -> StateM (Widget, Injector alpha , alpha -> Extractor alpha , GEvent)
-    ,   fdApplicator      ::  alpha -> alpha -> StateM ()}
-    | VertBox Parameters [FieldDescription alpha] -- ^ Vertical Box
-    | HoriBox Parameters [FieldDescription alpha] -- ^ Horizontal Box
-    | TabbedBox [(String,FieldDescription alpha)]   -- ^ Notebook
-
-data GenFieldDescription = forall alpha . FieldDescription alpha
 
 type MkFieldDescription alpha beta =
     Parameters      ->

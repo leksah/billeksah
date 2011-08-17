@@ -3,7 +3,7 @@
 -- Module      :  Graphics.UI.Editor.Composite
 -- Copyright   :  (c) Juergen Nicklisch-Franken, Hamish Mackenzie
 -- License     :  GNU-GPL
---2
+--
 -- Maintainer  :  <maintainer at leksah.org>
 -- Stability   :  provisional
 -- Portability :  portable
@@ -62,6 +62,8 @@ import Distribution.Text (simpleParse, display)
 import Distribution.Package (pkgName)
 import Data.Version (Version(..))
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk (Event(..))
+import Debug.Trace (trace)
+import Data.Typeable (Typeable)
 
 
 --
@@ -579,7 +581,7 @@ eitherOrEditor (leftEditor,leftParams) (rightEditor,rightParams)
 
 --
 -- | An editor for a selection from some given elements
-selectionEditor :: (Show alpha, Default alpha, Eq alpha) => ColumnDescr alpha
+selectionEditor :: (Show alpha, Typeable alpha, Default alpha, Eq alpha) => ColumnDescr alpha
     -> Maybe (alpha -> alpha -> Ordering) -- ^ The 'mbSort' arg, a sort function if desired
     -> Maybe (alpha -> alpha -> Bool) -- ^ the test to ommit double insertions
     -> Maybe ([alpha] -> StateM())
@@ -726,8 +728,8 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                                 return ()
                             Nothing -> return ()
 
-                       -- doubleClickToSelected treeViewSelected sel1 listStoreSelected stateR
-                       -- doubleClickToSelected treeViewUnselected sel2 listStoreUnselected stateR
+                        doubleClickToSelected treeViewSelected sel1 listStoreSelected stateR
+                        doubleClickToSelected treeViewUnselected sel2 listStoreUnselected stateR
                         writeIORef coreRef (Just (listStoreSelected,listStoreUnselected))
                 Just (listStoreSelected,listStoreUnselected) -> liftIO $ do
                     fill selected choices listStoreSelected listStoreUnselected)
@@ -772,18 +774,18 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                 case gtkEvent of
                     Gtk.Button{Gtk.eventClick = eventClick}
                         | eventClick == DoubleClick -> do
-                        rows <- treeSelectionGetSelectedRows treeViewSelection
-                        mbVal <- case rows of
-                                    ([i]:_) -> liftM (Just . GenSelection)
-                                        (listStoreGetValue listStore i)
-                                    otherwise -> return Nothing
+                            rows <- treeSelectionGetSelectedRows treeViewSelection
+                            mbVal <- case rows of
+                                        ([i]:_) -> liftM (Just . GenSelection)
+                                            (listStoreGetValue listStore i)
+                                        otherwise -> return Nothing
 
-                        reflectState (triggerGUIEvent notifier (dummyGUIEvent {
-                            geSelector = Selection,
-                            geGtkEvent = gtkEvent,
-                            geMbSelection = mbVal,
-                            geGtkReturn = True})) stateR
-                        return False
+                            reflectState (triggerGUIEvent notifier (dummyGUIEvent {
+                                geSelector = Selection,
+                                geGtkEvent = gtkEvent,
+                                geMbSelection = mbVal,
+                                geGtkReturn = True})) stateR
+                            return False
                     otherwise -> return False)
 
 
