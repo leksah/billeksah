@@ -1,3 +1,4 @@
+{-# LANGUAGE ExistentialQuantification #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.UI.Editor.MakeEditor
@@ -15,8 +16,12 @@
 module Graphics.Forms.Build (
 
     buildEditor
+
 ,   FieldDescriptionG(..)
+,   GenFieldDescriptionG(..)
+,   toFieldDescriptionG
 ,   mkFieldG
+
 ,   extractAndValidate
 ,   extract
 ,   mkEditor
@@ -24,7 +29,6 @@ module Graphics.Forms.Build (
 
 ,   getRealWidget
 ,   MkFieldDescriptionG
-
 ) where
 
 
@@ -42,6 +46,7 @@ import Data.Maybe (isNothing)
 import Data.IORef (newIORef)
 import qualified Graphics.UI.Gtk.Gdk.Events as GTK (Event(..))
 import Control.Monad.IO.Class (MonadIO(..))
+import Data.Typeable (Typeable)
 
 
 --
@@ -63,6 +68,20 @@ data FieldDescriptionG alpha =  FieldG Parameters (alpha -> StateM (Widget, Inje
     | VertBoxG Parameters [FieldDescriptionG alpha] -- Vertical forms box
     | HoriBoxG Parameters [FieldDescriptionG alpha] -- Horizontal forms box
     | TabbedBoxG [(String,FieldDescriptionG alpha)]   -- Notebook box
+
+data GenFieldDescriptionG = forall alpha . Typeable alpha => GenFG (FieldDescriptionG alpha) alpha
+
+
+toFieldDescriptionG :: FieldDescription alpha  -> FieldDescriptionG alpha
+toFieldDescriptionG (VertBox paras descrs) =  VertBoxG paras
+                                                        (map toFieldDescriptionG descrs)
+toFieldDescriptionG (HoriBox paras descrs) =  HoriBoxG paras
+                                                        (map toFieldDescriptionG descrs)
+toFieldDescriptionG (TabbedBox descrsp)    =  TabbedBoxG (map (\(s,d) ->
+                                                    (s, toFieldDescriptionG d)) descrsp)
+toFieldDescriptionG (Field parameters fieldPrinter fieldParser fieldEditor applicator) =
+    (FieldG parameters fieldEditor)
+
 
 parameters :: FieldDescriptionG alpha -> Parameters
 parameters (FieldG p _) = p

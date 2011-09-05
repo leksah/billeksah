@@ -30,7 +30,7 @@ module Base.Config (
 ) where
 
 import Base.PluginTypes
-import Base.PrinterParser
+import Base.ConfigFile
 import Base.Event
 import Base.State
 
@@ -49,6 +49,7 @@ import Data.Map (Map)
 import Base.Graph (topSortGraph)
 import Base.State (StateM)
 import Control.Monad.IO.Class (MonadIO(..))
+import Data.Typeable (cast)
 
 -- | Plugin file (.lksp)
 
@@ -66,49 +67,49 @@ pluginDescr = [
         mkFieldS
             "Name of the plugin"
             Nothing
-            (PP.text . show)
+            stringPrinter
             stringParser
             plName
             (\ b a -> a{plName = b})
     ,   mkFieldS
             "Version"
             Nothing
-            (PP.text . showVersion)
+            (stringPrinter . showVersion)
             versionParser
             plVersion
             (\ b a -> a{plVersion = b})
     ,   mkFieldS
             "Module"
             Nothing
-            (PP.text . show)
+            stringPrinter
             stringParser
             plModule
             (\ b a -> a{plModule = b})
     ,   mkFieldS
             "Interface"
             Nothing
-            (PP.text . show)
+            stringPrinter
             stringParser
             plInterface
             (\ b a -> a{plInterface = b})
     ,   mkFieldS
             "Prerequisite list"
-            (Just "Plugin root pathes in the form [\"p1\",\"p2\"]")
-            (PP.text . showPluginList)
+            Nothing
+            (stringPrinter . showPluginList)
             parsePluginList
             plPrerequisites
             (\ b a -> a{plPrerequisites = b})
     ,   mkFieldS
             "Synopsis"
             (Just "or call it comment")
-            (PP.text . show)
+            stringPrinter
             stringParser
             plSynopsis
             (\ b a -> a{plSynopsis = b})
            ]
 
 loadPluginDescr :: FilePath -> IO Plugin
-loadPluginDescr fn = readFields fn pluginDescr defaultPlugin
+loadPluginDescr fn = readFieldsSimple fn pluginDescr defaultPlugin
 
 writePluginDescr :: FilePath -> Plugin -> IO ()
 writePluginDescr fpath descr = do
@@ -116,13 +117,14 @@ writePluginDescr fpath descr = do
     if exists
         then do
             descrOld <- loadPluginDescr fpath
-            unless (descrOld == descr) $ writeFields fpath descr pluginDescr
-        else writeFields fpath descr pluginDescr
+            unless (descrOld == descr) $
+                writeFile fpath (showFieldsSimple descr pluginDescr)
+        else writeFile fpath (showFieldsSimple descr pluginDescr)
 
 -- | Plugin configfile (.lkshc)
 
 defaultConfig = PluginConfig {
-    cfName          = "Unnamed zombie config",
+    cfName          = "Unnamed zombie",
     cfVersion       = Version[0][],
     cfPlugins       = [],
     cfChoices       = [],
@@ -134,39 +136,41 @@ pluginConf = [
         mkFieldS
             "Name of the config"
             Nothing
-            (PP.text . show)
+            stringPrinter
             stringParser
             cfName
             (\ b a -> a{cfName = b})
     ,   mkFieldS
             "Version"
             Nothing
-            (PP.text . showVersion)
+            (stringPrinter . showVersion)
             versionParser
             cfVersion
             (\ b a -> a{cfVersion = b})
     ,   mkFieldS
             "Plugin list"
-            (Just "e.g. [(\"plug1\",(Nothing,Nothing))]")
-            (PP.text . showPluginList)
+            Nothing
+            (stringPrinter . showPluginList)
             parsePluginList
             cfPlugins
             (\ b a -> a{cfPlugins = b})
     ,   mkFieldS
             "Synopsis"
             (Just "or call it comment")
-            (PP.text . show)
+            stringPrinter
             stringParser
             cfSynopsis
             (\ b a -> a{cfSynopsis = b})
            ]
 
 loadPluginConfig  :: FilePath -> IO PluginConfig
-loadPluginConfig fn = readFields fn pluginConf defaultConfig
+loadPluginConfig fn = readFieldsSimple fn pluginConf defaultConfig
 
+writePluginConfig :: FilePath -> PluginConfig -> IO ()
 writePluginConfig fpath config = do
     configOld <- loadPluginConfig fpath
-    unless (configOld == config) $ writeFields fpath config pluginConf
+    unless (configOld == config) $
+        writeFile fpath (showFieldsSimple config pluginConf)
 
 type Error = String
 
@@ -179,8 +183,8 @@ loadPluginDescription fp (name,bounds) = do
 
 -- | Returns the description of a plugin
 getPluginDescr :: FilePath -> String -> Version -> IO Plugin
-getPluginDescr fp name version =  readFields (fp </> name ++ "-" ++ showVersion version ++ ".lkshp")
-                                            pluginDescr defaultPlugin
+getPluginDescr fp name version =  loadPluginDescr
+    (fp </> name ++ "-" ++ showVersion version ++ ".lkshp")
 
 -- | Take the latest allowed
 selectOptimalVersion :: [Version] -> VersionBounds -> Maybe Version
@@ -242,7 +246,7 @@ allKnownPlugins fp = do
     filesAndDirs <- getDirectoryContents fp
     files        <- filterM (\f -> doesFileExist (fp </> f)) filesAndDirs
     let relevantFiles =  [ fp | fp <- files, takeExtension fp == ".lkshp"]
-    mapM (\ fp -> readFields fp pluginDescr defaultPlugin) relevantFiles
+    mapM (\ fp -> loadPluginDescr fp) relevantFiles
 
 getPrereqChoices :: FilePath -> IO [Prerequisite]
 getPrereqChoices currentConfigPath= do

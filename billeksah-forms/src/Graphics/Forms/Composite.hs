@@ -3,7 +3,7 @@
 -- Module      :  Graphics.UI.Editor.Composite
 -- Copyright   :  (c) Juergen Nicklisch-Franken, Hamish Mackenzie
 -- License     :  GNU-GPL
---2
+--
 -- Maintainer  :  <maintainer at leksah.org>
 -- Stability   :  provisional
 -- Portability :  portable
@@ -27,9 +27,9 @@ module Graphics.Forms.Composite (
 ,   stringsEditor
 
 ,   versionEditor
-,   versionRangeEditor
-,   dependencyEditor
-,   dependenciesEditor
+--,   versionRangeEditor
+--,   dependencyEditor
+--,   dependenciesEditor
 ) where
 
 import Graphics.Forms.Parameters
@@ -62,6 +62,8 @@ import Distribution.Text (simpleParse, display)
 import Distribution.Package (pkgName)
 import Data.Version (Version(..))
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk (Event(..))
+import Debug.Trace (trace)
+import Data.Typeable (Typeable)
 
 
 --
@@ -579,7 +581,7 @@ eitherOrEditor (leftEditor,leftParams) (rightEditor,rightParams)
 
 --
 -- | An editor for a selection from some given elements
-selectionEditor :: (Show alpha, Default alpha, Eq alpha) => ColumnDescr alpha
+selectionEditor :: (Show alpha, Typeable alpha, Default alpha, Eq alpha) => ColumnDescr alpha
     -> Maybe (alpha -> alpha -> Ordering) -- ^ The 'mbSort' arg, a sort function if desired
     -> Maybe (alpha -> alpha -> Bool) -- ^ the test to ommit double insertions
     -> Maybe ([alpha] -> StateM())
@@ -726,8 +728,8 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                                 return ()
                             Nothing -> return ()
 
-                       -- doubleClickToSelected treeViewSelected sel1 listStoreSelected stateR
-                       -- doubleClickToSelected treeViewUnselected sel2 listStoreUnselected stateR
+                        doubleClickToSelected treeViewSelected sel1 listStoreSelected stateR
+                        doubleClickToSelected treeViewUnselected sel2 listStoreUnselected stateR
                         writeIORef coreRef (Just (listStoreSelected,listStoreUnselected))
                 Just (listStoreSelected,listStoreUnselected) -> liftIO $ do
                     fill selected choices listStoreSelected listStoreUnselected)
@@ -772,18 +774,18 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                 case gtkEvent of
                     Gtk.Button{Gtk.eventClick = eventClick}
                         | eventClick == DoubleClick -> do
-                        rows <- treeSelectionGetSelectedRows treeViewSelection
-                        mbVal <- case rows of
-                                    ([i]:_) -> liftM (Just . GenSelection)
-                                        (listStoreGetValue listStore i)
-                                    otherwise -> return Nothing
+                            rows <- treeSelectionGetSelectedRows treeViewSelection
+                            mbVal <- case rows of
+                                        ([i]:_) -> liftM (Just . GenSelection)
+                                            (listStoreGetValue listStore i)
+                                        otherwise -> return Nothing
 
-                        reflectState (triggerGUIEvent notifier (dummyGUIEvent {
-                            geSelector = Selection,
-                            geGtkEvent = gtkEvent,
-                            geMbSelection = mbVal,
-                            geGtkReturn = True})) stateR
-                        return False
+                            reflectState (triggerGUIEvent notifier (dummyGUIEvent {
+                                geSelector = Selection,
+                                geGtkEvent = gtkEvent,
+                                geMbSelection = mbVal,
+                                geGtkReturn = True})) stateR
+                            return False
                     otherwise -> return False)
 
 
@@ -957,124 +959,124 @@ stringsEditor validation trimBlanks p =
         (Just (==))
         (("Shadow", ParaShadow ShadowIn) <<< p)
 
-dependencyEditor :: [PackageIdentifier] -> Editor Dependency
-dependencyEditor packages para noti = do
-    (wid,inj,ext) <- pairEditor
-        ((eitherOrEditor (comboSelectionEditor ((sort . nub) (map (display . pkgName) packages)) id
-            , ("Name", ParaString "Select") <<< defaultParams)
-            (stringEditor (const True) True, ("Name", ParaString "Enter") <<< defaultParams)
-            "Select from list?"), ("Name", ParaString  "Name") <<< defaultParams)
-        (versionRangeEditor,("Name", ParaString "Version") <<< defaultParams)
-        (("Direction", ParaDir Vertical) <<< para)
-        noti
-    let pinj (Dependency pn@(PackageName s) v) = if elem s (map (display . pkgName) packages)
-                                                    then inj (Left s,v)
-                                                    else inj (Right s,v)
-    let pext = do
-        mbp <- ext
-        case mbp of
-            Nothing -> return Nothing
-            Just (Left "",v) -> return Nothing
-            Just (Left s,v) -> return (Just $ Dependency (PackageName s) v)
-            Just (Right "",v) -> return Nothing
-            Just (Right s,v) -> return (Just $ Dependency (PackageName s) v)
-    return (wid,pinj,pext)
-
-dependenciesEditor :: [PackageIdentifier] -> Editor [Dependency]
-dependenciesEditor packages p noti =
-    multisetEditor
-        (ColumnDescr True [("Package",\(Dependency (PackageName str) _) ->
-                                [cellText := str],Nothing)
-                           ,("Version",\(Dependency _ vers) ->
-                                    [cellText := display vers], Nothing)])
-        (dependencyEditor packages,
-            ("OuterAlignment",ParaAlign (0.0, 0.5, 1.0, 1.0)) <<<
-                (("InnerAlignment", ParaAlign (0.0, 0.5, 1.0, 1.0)) <<< defaultParams))
-        (Just (sortBy (\ (Dependency p1 _) (Dependency p2 _) -> compare p1 p2)))
-        (Just (\ (Dependency p1 _) (Dependency p2 _) -> p1 == p2))
-        (("Shadow", ParaShadow ShadowIn) <<<
-            ("OuterAlignment",ParaAlign (0.0, 0.5, 1.0, 1.0)) <<<
-                ("InnerAlignment", ParaAlign (0.0, 0.5, 1.0, 1.0)) <<<
-                    ("Direction",ParaDir Vertical) <<<
-                       ("VPack",ParaPack PackGrow) <<< p)
-        noti
-
-versionRangeEditor :: Editor VersionRange
-versionRangeEditor para noti = do
-    (wid,inj,ext) <-
-        maybeEditor
-            ((eitherOrEditor
-                (pairEditor
-                    (comboSelectionEditor v1 show, defaultParams)
-                    (versionEditor, ("Name",ParaString "Enter Version") <<< defaultParams),
-                        (("Direction",ParaDir Vertical) <<<
-                            ("Name",ParaString "Simple") <<<
-                            ("OuterAlignment",ParaAlign  (0.0, 0.0, 0.0, 0.0)) <<<
-                            ("OuterPadding", ParaPadding (0, 0, 0, 0)) <<<
-                            ("InnerAlignment", ParaAlign  (0.0, 0.0, 0.0, 0.0)) <<<
-                            ("InnerPadding", ParaPadding   (0, 0, 0, 0)) <<< defaultParams))
-                (tupel3Editor
-                    (comboSelectionEditor v2 show, defaultParams)
-                    (versionRangeEditor, ("Shadow", ParaShadow ShadowIn) <<< defaultParams)
-                    (versionRangeEditor, ("Shadow", ParaShadow ShadowIn) <<< defaultParams),
-                        ("Name", ParaString "Complex") <<<
-                        ("Direction", ParaDir Vertical) <<<
-                        ("OuterAlignment", ParaAlign (0.0, 0.0, 0.0, 0.0)) <<<
-                        ("OuterPadding", ParaPadding (0, 0, 0, 0)) <<<
-                        ("InnerAlignment", ParaAlign (0.0, 0.0, 0.0, 0.0)) <<<
-                        ("InnerPadding", ParaPadding (0, 0, 0, 0)) <<<defaultParams)
-                        "Select version range"), defaultParams)
-            False "Any Version"
-            (("Direction", ParaDir Vertical) <<< para)
-            noti
-    let vrinj AnyVersion                =   inj Nothing
-        vrinj (ThisVersion v)           =   inj (Just (Left (ThisVersionS,v)))
-        vrinj (LaterVersion v)          =   inj (Just (Left (LaterVersionS,v)))
-        vrinj (EarlierVersion v)        =   inj (Just (Left (EarlierVersionS,v)))
-        vrinj (UnionVersionRanges (ThisVersion v1) (LaterVersion v2)) | v1 == v2
-                                        =  inj (Just (Left (ThisOrLaterVersionS,v1)))
-        vrinj (UnionVersionRanges (LaterVersion v1) (ThisVersion v2)) | v1 == v2
-                                        =  inj (Just (Left (ThisOrLaterVersionS,v1)))
-        vrinj (UnionVersionRanges (ThisVersion v1) (EarlierVersion v2)) | v1 == v2
-                                        =  inj (Just (Left (ThisOrEarlierVersionS,v1)))
-        vrinj (UnionVersionRanges (EarlierVersion v1) (ThisVersion v2)) | v1 == v2
-                                        =  inj (Just (Left (ThisOrEarlierVersionS,v1)))
-        vrinj (UnionVersionRanges v1 v2)=  inj (Just (Right (UnionVersionRangesS,v1,v2)))
-        vrinj (IntersectVersionRanges v1 v2)
-                                        =    inj (Just (Right (IntersectVersionRangesS,v1,v2)))
-    let vrext = do  mvr <- ext
-                    case mvr of
-                        Nothing -> return (Just AnyVersion)
-                        Just Nothing -> return (Just AnyVersion)
-                        Just (Just (Left (ThisVersionS,v)))     -> return (Just (ThisVersion v))
-                        Just (Just (Left (LaterVersionS,v)))    -> return (Just (LaterVersion v))
-                        Just (Just (Left (EarlierVersionS,v)))   -> return (Just (EarlierVersion v))
-
-                        Just (Just (Left (ThisOrLaterVersionS,v)))   -> return (Just (orLaterVersion  v))
-                        Just (Just (Left (ThisOrEarlierVersionS,v)))   -> return (Just (orEarlierVersion  v))
-                        Just (Just (Right (UnionVersionRangesS,v1,v2)))
-                                                        -> return (Just (UnionVersionRanges v1 v2))
-                        Just (Just (Right (IntersectVersionRangesS,v1,v2)))
-                                                        -> return (Just (IntersectVersionRanges v1 v2))
-    return (wid,vrinj,vrext)
-        where
-            v1 = [ThisVersionS,LaterVersionS,ThisOrLaterVersionS,EarlierVersionS,ThisOrEarlierVersionS]
-            v2 = [UnionVersionRangesS,IntersectVersionRangesS]
-
-data Version1 = ThisVersionS | LaterVersionS | ThisOrLaterVersionS | EarlierVersionS | ThisOrEarlierVersionS
-    deriving (Eq)
-instance Show Version1 where
-    show ThisVersionS   =  "This Version"
-    show LaterVersionS  =  "Later Version"
-    show ThisOrLaterVersionS = "This or later Version"
-    show EarlierVersionS =  "Earlier Version"
-    show ThisOrEarlierVersionS = "This or earlier Version"
-
-data Version2 = UnionVersionRangesS | IntersectVersionRangesS
-    deriving (Eq)
-instance Show Version2 where
-    show UnionVersionRangesS =  "Union Version Ranges"
-    show IntersectVersionRangesS =  "Intersect Version Ranges"
+--dependencyEditor :: [PackageIdentifier] -> Editor Dependency
+--dependencyEditor packages para noti = do
+--    (wid,inj,ext) <- pairEditor
+--        ((eitherOrEditor (comboSelectionEditor ((sort . nub) (map (display . pkgName) packages)) id
+--            , ("Name", ParaString "Select") <<< defaultParams)
+--            (stringEditor (const True) True, ("Name", ParaString "Enter") <<< defaultParams)
+--            "Select from list?"), ("Name", ParaString  "Name") <<< defaultParams)
+--        (versionRangeEditor,("Name", ParaString "Version") <<< defaultParams)
+--        (("Direction", ParaDir Vertical) <<< para)
+--        noti
+--    let pinj (Dependency pn@(PackageName s) v) = if elem s (map (display . pkgName) packages)
+--                                                    then inj (Left s,v)
+--                                                    else inj (Right s,v)
+--    let pext = do
+--        mbp <- ext
+--        case mbp of
+--            Nothing -> return Nothing
+--            Just (Left "",v) -> return Nothing
+--            Just (Left s,v) -> return (Just $ Dependency (PackageName s) v)
+--            Just (Right "",v) -> return Nothing
+--            Just (Right s,v) -> return (Just $ Dependency (PackageName s) v)
+--    return (wid,pinj,pext)
+--
+--dependenciesEditor :: [PackageIdentifier] -> Editor [Dependency]
+--dependenciesEditor packages p noti =
+--    multisetEditor
+--        (ColumnDescr True [("Package",\(Dependency (PackageName str) _) ->
+--                                [cellText := str],Nothing)
+--                           ,("Version",\(Dependency _ vers) ->
+--                                    [cellText := display vers], Nothing)])
+--        (dependencyEditor packages,
+--            ("OuterAlignment",ParaAlign (0.0, 0.5, 1.0, 1.0)) <<<
+--                (("InnerAlignment", ParaAlign (0.0, 0.5, 1.0, 1.0)) <<< defaultParams))
+--        (Just (sortBy (\ (Dependency p1 _) (Dependency p2 _) -> compare p1 p2)))
+--        (Just (\ (Dependency p1 _) (Dependency p2 _) -> p1 == p2))
+--        (("Shadow", ParaShadow ShadowIn) <<<
+--            ("OuterAlignment",ParaAlign (0.0, 0.5, 1.0, 1.0)) <<<
+--                ("InnerAlignment", ParaAlign (0.0, 0.5, 1.0, 1.0)) <<<
+--                    ("Direction",ParaDir Vertical) <<<
+--                       ("VPack",ParaPack PackGrow) <<< p)
+--        noti
+--
+--versionRangeEditor :: Editor VersionRange
+--versionRangeEditor para noti = do
+--    (wid,inj,ext) <-
+--        maybeEditor
+--            ((eitherOrEditor
+--                (pairEditor
+--                    (comboSelectionEditor v1 show, defaultParams)
+--                    (versionEditor, ("Name",ParaString "Enter Version") <<< defaultParams),
+--                        (("Direction",ParaDir Vertical) <<<
+--                            ("Name",ParaString "Simple") <<<
+--                            ("OuterAlignment",ParaAlign  (0.0, 0.0, 0.0, 0.0)) <<<
+--                            ("OuterPadding", ParaPadding (0, 0, 0, 0)) <<<
+--                            ("InnerAlignment", ParaAlign  (0.0, 0.0, 0.0, 0.0)) <<<
+--                            ("InnerPadding", ParaPadding   (0, 0, 0, 0)) <<< defaultParams))
+--                (tupel3Editor
+--                    (comboSelectionEditor v2 show, defaultParams)
+--                    (versionRangeEditor, ("Shadow", ParaShadow ShadowIn) <<< defaultParams)
+--                    (versionRangeEditor, ("Shadow", ParaShadow ShadowIn) <<< defaultParams),
+--                        ("Name", ParaString "Complex") <<<
+--                        ("Direction", ParaDir Vertical) <<<
+--                        ("OuterAlignment", ParaAlign (0.0, 0.0, 0.0, 0.0)) <<<
+--                        ("OuterPadding", ParaPadding (0, 0, 0, 0)) <<<
+--                        ("InnerAlignment", ParaAlign (0.0, 0.0, 0.0, 0.0)) <<<
+--                        ("InnerPadding", ParaPadding (0, 0, 0, 0)) <<<defaultParams)
+--                        "Select version range"), defaultParams)
+--            False "Any Version"
+--            (("Direction", ParaDir Vertical) <<< para)
+--            noti
+--    let vrinj AnyVersion                =   inj Nothing
+--        vrinj (ThisVersion v)           =   inj (Just (Left (ThisVersionS,v)))
+--        vrinj (LaterVersion v)          =   inj (Just (Left (LaterVersionS,v)))
+--        vrinj (EarlierVersion v)        =   inj (Just (Left (EarlierVersionS,v)))
+--        vrinj (UnionVersionRanges (ThisVersion v1) (LaterVersion v2)) | v1 == v2
+--                                        =  inj (Just (Left (ThisOrLaterVersionS,v1)))
+--        vrinj (UnionVersionRanges (LaterVersion v1) (ThisVersion v2)) | v1 == v2
+--                                        =  inj (Just (Left (ThisOrLaterVersionS,v1)))
+--        vrinj (UnionVersionRanges (ThisVersion v1) (EarlierVersion v2)) | v1 == v2
+--                                        =  inj (Just (Left (ThisOrEarlierVersionS,v1)))
+--        vrinj (UnionVersionRanges (EarlierVersion v1) (ThisVersion v2)) | v1 == v2
+--                                        =  inj (Just (Left (ThisOrEarlierVersionS,v1)))
+--        vrinj (UnionVersionRanges v1 v2)=  inj (Just (Right (UnionVersionRangesS,v1,v2)))
+--        vrinj (IntersectVersionRanges v1 v2)
+--                                        =    inj (Just (Right (IntersectVersionRangesS,v1,v2)))
+--    let vrext = do  mvr <- ext
+--                    case mvr of
+--                        Nothing -> return (Just AnyVersion)
+--                        Just Nothing -> return (Just AnyVersion)
+--                        Just (Just (Left (ThisVersionS,v)))     -> return (Just (ThisVersion v))
+--                        Just (Just (Left (LaterVersionS,v)))    -> return (Just (LaterVersion v))
+--                        Just (Just (Left (EarlierVersionS,v)))   -> return (Just (EarlierVersion v))
+--
+--                        Just (Just (Left (ThisOrLaterVersionS,v)))   -> return (Just (orLaterVersion  v))
+--                        Just (Just (Left (ThisOrEarlierVersionS,v)))   -> return (Just (orEarlierVersion  v))
+--                        Just (Just (Right (UnionVersionRangesS,v1,v2)))
+--                                                        -> return (Just (UnionVersionRanges v1 v2))
+--                        Just (Just (Right (IntersectVersionRangesS,v1,v2)))
+--                                                        -> return (Just (IntersectVersionRanges v1 v2))
+--    return (wid,vrinj,vrext)
+--        where
+--            v1 = [ThisVersionS,LaterVersionS,ThisOrLaterVersionS,EarlierVersionS,ThisOrEarlierVersionS]
+--            v2 = [UnionVersionRangesS,IntersectVersionRangesS]
+--
+--data Version1 = ThisVersionS | LaterVersionS | ThisOrLaterVersionS | EarlierVersionS | ThisOrEarlierVersionS
+--    deriving (Eq)
+--instance Show Version1 where
+--    show ThisVersionS   =  "This Version"
+--    show LaterVersionS  =  "Later Version"
+--    show ThisOrLaterVersionS = "This or later Version"
+--    show EarlierVersionS =  "Earlier Version"
+--    show ThisOrEarlierVersionS = "This or earlier Version"
+--
+--data Version2 = UnionVersionRangesS | IntersectVersionRangesS
+--    deriving (Eq)
+--instance Show Version2 where
+--    show UnionVersionRangesS =  "Union Version Ranges"
+--    show IntersectVersionRangesS =  "Intersect Version Ranges"
 
 versionEditor :: Editor Version
 versionEditor para noti = do
@@ -1087,20 +1089,20 @@ versionEditor para noti = do
             Just s -> return (simpleParse s)
     return (wid, pinj, pext)
 
-instance Default Version1
-    where getDefault = ThisVersionS
-
-instance Default Version2
-    where getDefault = UnionVersionRangesS
+--instance Default Version1
+--    where getDefault = ThisVersionS
+--
+--instance Default Version2
+--    where getDefault = UnionVersionRangesS
 
 instance Default Version
     where getDefault = forceJust (simpleParse "0") "PackageEditor>>default version"
 
-instance Default VersionRange
-    where getDefault = AnyVersion
+--instance Default VersionRange
+--    where getDefault = AnyVersion
 
-instance Default Dependency
-    where getDefault = Dependency getDefault getDefault
+--instance Default Dependency
+--    where getDefault = Dependency getDefault getDefault
 
 instance Default PackageName
     where getDefault = PackageName getDefault

@@ -14,11 +14,7 @@
 --
 -----------------------------------------------------------------------------------
 module Graphics.Forms.Description (
-    FieldDescription(..)
-,   mkField
-,   toFieldDescriptionG
-,   toFieldDescriptionS
-
+    mkField
 ,   formsPluginInterface
 ) where
 
@@ -35,6 +31,7 @@ import qualified Text.ParserCombinators.Parsec as P
 import Data.Version (Version(..))
 import Data.Typeable (Typeable)
 import qualified Data.Map as Map (empty)
+import Base.Preferences (validatePrefs)
 
 -- ----------------------------------------------
 -- * It's a plugin
@@ -50,42 +47,11 @@ formsPluginInterface = do
          piName    = pluginNameForms,
          piVersion = Version [1,0,0][]}
 
--- -----------------------------------------------
--- * Events the gui frame triggers
---
-
--- | Nothing interesting so far
-data FormsEvent =
-    RegisterPrefs [(String, [GenFieldDescription])]
-    | PrefsChanged
-    | NeedRestart
-        deriving Typeable
-
-data FormsEventSel = FormsEventSel
-    deriving (Eq, Ord, Show, Typeable)
-
-instance Selector FormsEventSel where
-    type ValueType FormsEventSel = PEvent FormsEvent
-
-instance EventSelector FormsEventSel where
-    type BaseType FormsEventSel = FormsEvent
-
-
-triggerFormsEvent :: FormsEvent -> StateM (FormsEvent)
-triggerFormsEvent = triggerEvent FormsEventSel
-
-getFormsEvent :: StateM (PEvent FormsEvent)
-getFormsEvent = getEvent FormsEventSel
 
 -- -----------------------------------------------
 -- * Initialization
 --
 
-data PrefsDescrState = PrefsDescrState
-    deriving (Eq, Ord, Show, Typeable)
-
-instance Selector PrefsDescrState where
-    type ValueType PrefsDescrState = [(String, [GenFieldDescription])]
 
 formsInit1 :: BaseEvent -> PEvent FormsEvent -> StateM ()
 formsInit1 baseEvent myEvent = do
@@ -93,31 +59,22 @@ formsInit1 baseEvent myEvent = do
     initialRegister
     return ()
 
+framePrefs = []
+
 formsInit2 :: BaseEvent -> PEvent FormsEvent -> StateM ()
 formsInit2 baseEvent myEvent = do
     message Debug ("init2 " ++ pluginNameForms)
     RegisterPrefs allPrefs <- triggerFormsEvent (RegisterPrefs framePrefs)
+    case validatePrefs allPrefs of
+        Nothing -> return ()
+        Just str -> error $ "Description>>formsInit2::"++ str
     setState PrefsDescrState allPrefs
     return ()
-
-framePrefs = []
 
 initialRegister = do
     registerState GuiHandlerStateSel (Handlers Map.empty)
     registerState GtkEventsStateSel (GtkRegMap Map.empty)
-    registerState PrefsDescrState []
-
-data FieldDescription alpha =  Field {
-        fdParameters      ::  Parameters
-    ,   fdFieldPrinter    ::  alpha -> PP.Doc
-    ,   fdFieldParser     ::  alpha -> P.CharParser () alpha
-    ,   fdFieldEditor     ::  alpha -> StateM (Widget, Injector alpha , alpha -> Extractor alpha , GEvent)
-    ,   fdApplicator      ::  alpha -> alpha -> StateM ()}
-    | VertBox Parameters [FieldDescription alpha] -- ^ Vertical Box
-    | HoriBox Parameters [FieldDescription alpha] -- ^ Horizontal Box
-    | TabbedBox [(String,FieldDescription alpha)]   -- ^ Notebook
-
-data GenFieldDescription = forall alpha . FieldDescription alpha
+    registerState PrefsDescrState framePrefs
 
 type MkFieldDescription alpha beta =
     Parameters      ->
@@ -151,29 +108,4 @@ mkField parameters printer parser getter setter editor applicator  =
                 then return ()
                 else applicator newField)
 
-toFieldDescriptionG :: FieldDescription alpha  -> FieldDescriptionG alpha
-toFieldDescriptionG (VertBox paras descrs) =  VertBoxG paras
-                                                        (map toFieldDescriptionG descrs)
-toFieldDescriptionG (HoriBox paras descrs) =  HoriBoxG paras
-                                                        (map toFieldDescriptionG descrs)
-toFieldDescriptionG (TabbedBox descrsp)    =  TabbedBoxG (map (\(s,d) ->
-                                                    (s, toFieldDescriptionG d)) descrsp)
-toFieldDescriptionG (Field parameters fieldPrinter fieldParser fieldEditor applicator) =
-    (FieldG parameters fieldEditor)
-
-flattenFieldDescription :: FieldDescription alpha  -> [FieldDescription alpha]
-flattenFieldDescription (VertBox paras descrs)  =   concatMap flattenFieldDescription descrs
-flattenFieldDescription (HoriBox paras descrs)  =   concatMap flattenFieldDescription descrs
-flattenFieldDescription (TabbedBox descrsp)     =   concatMap (flattenFieldDescription . snd) descrsp
-flattenFieldDescription fdpp                  =   [fdpp]
-
-toFieldDescriptionS :: FieldDescription alpha -> [FieldDescriptionS alpha]
-toFieldDescriptionS = map ppToS . flattenFieldDescription
-
-
-ppToS :: FieldDescription alpha -> FieldDescriptionS alpha
-ppToS (Field para print pars _ _) =
-    FieldS (let ParaString str = getPara "Name" para in str) print pars
-                                    (Just (let ParaString str = getPara "Synopsis" para in str))
-ppToS _                           = error "DescriptionPP.ppToS Can't transform"
 

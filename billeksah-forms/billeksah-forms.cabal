@@ -18,6 +18,7 @@ tested-with: GHC ==7.0
 Library
     exposed-modules:
         Graphics.Forms
+        Graphics.Forms.Types
         Graphics.Forms.Basics
         Graphics.Forms.Build
         Graphics.Forms.Composite
@@ -28,6 +29,7 @@ Library
         Graphics.Forms.Simple
         Graphics.Forms.FormPane
         Base.Preferences
+        Graphics.Panes.Preferences
     exposed: True
     buildable: True
     hs-source-dirs: src

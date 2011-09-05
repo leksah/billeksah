@@ -20,7 +20,7 @@ Library
     exposed-modules:
         Base
         Base.Event
-        Base.PrinterParser
+        Base.ConfigFile
         Base.Graph
         Base.PluginTypes
         Base.MyMissing

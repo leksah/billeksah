@@ -1,5 +1,5 @@
 {-# Language TypeSynonymInstances, ScopedTypeVariables, RankNTypes, TypeFamilies, NoMonomorphismRestriction,
-    FlexibleContexts #-}
+    FlexibleContexts, DeriveDataTypeable #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Session
@@ -39,6 +39,7 @@ import qualified Data.Map as Map
 import qualified Text.PrettyPrint as PP (text)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time (getTimeZone, utcToLocalTime)
+import Data.Typeable (Typeable)
 
 ------------------------------------------------------------------------
 -- * Interface
@@ -71,7 +72,7 @@ saveSession = do
         ,   ssActivePane          =   activeP
         ,   ssToolbarVisible      =   tbv
         ,   ssExtensions          =   extensions}
-        return(showFields state sessionDescr)
+        return(showFieldsSimple state sessionDescr)
 
 --
 -- | Recovers a session from a previously saved string
@@ -82,7 +83,10 @@ recoverSession string = do
     paneCloseAll
     groupsCloseAll
     viewCollapseAll
-    recoverSession' string
+    mbError <- recoverSession' string
+    case mbError of
+        Just err -> message Warning err
+        otherwise -> return ()
     return ()
 
 
@@ -97,7 +101,7 @@ data SessionState = SessionState {
     ,   ssActivePane          ::   Maybe String
     ,   ssToolbarVisible      ::   Bool
     ,   ssExtensions          ::   [(String,String)]
-}
+} deriving Typeable
 
 
 defaultSession = SessionState {
@@ -115,50 +119,50 @@ sessionDescr = [
         mkFieldS
             "Time of storage"
             Nothing
-            (PP.text . show)
+            stringPrinter
             stringParser
             ssSaveTime
             (\ b a -> a{ssSaveTime = b})
     ,   mkFieldS
             "Layout"
             Nothing
-            (PP.text . show)
+            (stringPrinter . show)
             readParser
             ssLayout
             (\ b a -> a{ssLayout  = b})
     ,   mkFieldS
             "Population"
             Nothing
-            (PP.text . show)
+            (stringPrinter . show)
             readParser
             ssPopulation
             (\ b a -> a{ssPopulation = b})
     ,   mkFieldS
             "Window size"
             Nothing
-            (PP.text . show)
+            (stringPrinter . show)
             (pairParser intParser)
             ssWindowSize
             (\(c,d) a -> a{ssWindowSize = (c,d)})
     ,   mkFieldS
             "Maybe active pane"
             Nothing
-            (PP.text . show)
+            (stringPrinter . show)
             readParser
             ssActivePane
             (\ b a -> a{ssActivePane = b})
     ,   mkFieldS
             "Toolbar visible"
             Nothing
-            (PP.text . show)
+            (stringPrinter . show)
             readParser
             ssToolbarVisible
             (\ b a -> a{ssToolbarVisible = b})
     ,   mkFieldS
             "Extensions"
             Nothing
-            (PP.text . show)
-            (readParser)
+            (stringPrinter . show)
+            readParser
             ssExtensions
             (\b a -> a{ssExtensions = b})]
 
@@ -257,7 +261,7 @@ getSessionExtension (GenS SessionExtension{seName = name, seRetriever = retrieve
 recoverSession' :: String -> StateM (Maybe String)
 recoverSession' sessionString = catchState (do
     wdw         <-  getMainWindow
-    let sessionSt = parseFields sessionString sessionDescr defaultSession
+    let sessionSt = parseFieldsSimple sessionString sessionDescr defaultSession
     liftIO $ windowSetDefaultSize wdw (fst (ssWindowSize sessionSt))(snd (ssWindowSize sessionSt))
     applyLayout (ssLayout sessionSt)
     populate (ssPopulation sessionSt)

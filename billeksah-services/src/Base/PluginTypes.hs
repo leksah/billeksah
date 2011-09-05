@@ -56,7 +56,7 @@ data PluginConfig  = PluginConfig {
     cfPlugins       :: [Prerequisite], -- ^ plugins to load
     cfChoices       :: [Prerequisite], -- ^ other plugins
     cfSynopsis      :: String} -- ^ comment for this configuration
-    deriving (Eq,Ord,Show)
+    deriving (Eq,Ord,Show,Typeable)
 
 type PluginName    = String
 
@@ -75,7 +75,7 @@ data Plugin        = Plugin {
     plModule        :: String,
     plInterface     :: String,
     plSynopsis      :: String}
-    deriving (Eq,Ord,Show, Read)
+    deriving (Eq,Ord,Show, Read, Typeable)
 
 -- | Get the name of the plugin, which includes its version
 getPluginName :: Plugin -> String

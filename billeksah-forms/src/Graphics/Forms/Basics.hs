@@ -33,12 +33,25 @@ module Graphics.Forms.Basics (
 
 ,   pluginNameForms
 
+,   FieldDescription(..)
+,   GenFieldDescription(..)
+,   GenValue(..)
+
+,   SectionName
+,   PrefsDescrState(..)
+
+,   FormsEvent(..)
+,   FormsEventSel(..)
+,   triggerFormsEvent
+,   getFormsEvent
+
 ) where
 
-import Graphics.Forms.Parameters
-import Graphics.UI.Gtk
-import Base
 
+import Base
+import Graphics.Forms.Parameters
+
+import Graphics.UI.Gtk
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk
 import Data.Unique
 import Data.IORef
@@ -49,6 +62,8 @@ import Data.Maybe (isJust,fromJust)
 import Control.Arrow (first)
 import Base.MyMissing (allOf)
 import Data.Typeable (Typeable)
+import qualified Text.PrettyPrint as PP (Doc)
+import qualified Text.ParserCombinators.Parsec as P (CharParser)
 
 pluginNameForms = "billeksah-forms"
 
@@ -121,3 +136,61 @@ data GenSelection = forall alpha . Typeable alpha => GenSelection alpha
 genericGUIEvents = [FocusOut,FocusIn,ButtonPressed,KeyPressed]
 allGUIEvents :: [GUIEventSelector]
 allGUIEvents = allOf
+
+-- * A description for fields, that can be edited with a GUI
+--
+data FieldDescription alpha =  Field {
+        fdParameters      ::  Parameters
+    ,   fdFieldPrinter    ::  alpha -> PP.Doc
+    ,   fdFieldParser     ::  alpha -> P.CharParser () alpha
+    ,   fdFieldEditor     ::  alpha -> StateM (Widget, Injector alpha , alpha -> Extractor alpha , GEvent)
+    ,   fdApplicator      ::  alpha -> alpha -> StateM ()}
+    | VertBox Parameters [FieldDescription alpha] -- ^ Vertical Box
+    | HoriBox Parameters [FieldDescription alpha] -- ^ Horizontal Box
+    | TabbedBox [(String,FieldDescription alpha)]   -- ^ Notebook
+
+data GenFieldDescription = forall alpha . Typeable alpha => GenF (FieldDescription alpha) alpha
+data GenValue = forall alpha . Typeable alpha => GenV alpha
+
+-- -----------------------------------------------
+-- * Events the gui frame triggers
+--
+
+-- | The events of the forms plugin
+data FormsEvent =
+    RegisterPrefs [(String,GenFieldDescription)]
+        -- ^ Callback to register perferences
+    | PrefsChanged
+        -- ^ The preferences have changed
+    | NeedRestart
+        -- ^ The application needs to be restarted to apply the changed preferences
+        deriving Typeable
+
+data FormsEventSel = FormsEventSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector FormsEventSel where
+    type ValueType FormsEventSel = PEvent FormsEvent
+
+instance EventSelector FormsEventSel where
+    type BaseType FormsEventSel = FormsEvent
+
+
+triggerFormsEvent :: FormsEvent -> StateM (FormsEvent)
+triggerFormsEvent = triggerEvent FormsEventSel
+
+getFormsEvent :: StateM (PEvent FormsEvent)
+getFormsEvent = getEvent FormsEventSel
+
+-------------------------------------
+-- * Defining the state
+--
+
+type SectionName = String
+
+data PrefsDescrState = PrefsDescrState
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector PrefsDescrState where
+    type ValueType PrefsDescrState = [(String,GenFieldDescription)]
+
