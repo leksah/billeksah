@@ -125,72 +125,41 @@ newNotebook = do
 
 buildGenericEditor :: [(String,GenFieldDescriptionG)] ->
     StateM (Widget, Injector [GenValue] , [GenValue] -> Extractor [GenValue], GEvent)
-buildGenericEditor pairList = do
-    reifyState $ \ stateR -> do
-        nb <- newNotebook
-        notebookSetShowTabs nb False
-        resList <- reflectState
-            (mapM (\ (_,GenFG des val) ->
-                buildEditor (toGenFieldDescrG des) (GenV val)) pairList) stateR
-        let (widgets, setInjs, getExts, notifiers) = unzip4 resList
-
-        mapM_ (\ (labelString, widget) -> do
-            sw <- scrolledWindowNew Nothing Nothing
-            scrolledWindowAddWithViewport sw widget
-            scrolledWindowSetPolicy sw PolicyAutomatic PolicyAutomatic
-            notebookAppendPage nb sw labelString)
-             (zip (map fst pairList) widgets)
-        listStore   <- listStoreNew (map fst pairList)
-        listView    <- treeViewNewWithModel listStore
-        widgetSetSizeRequest listView 100 (-1)
-        sel         <- treeViewGetSelection listView
-        treeSelectionSetMode sel SelectionSingle
-        renderer    <- cellRendererTextNew
-        col         <- treeViewColumnNew
-        treeViewAppendColumn listView col
-        cellLayoutPackStart col renderer True
-        cellLayoutSetAttributes col renderer listStore $ \row ->
-            [ cellText := row ]
-        treeViewSetHeadersVisible listView False
-        treeSelectionSelectPath sel [0]
-        notebookSetCurrentPage nb 0
-        sel `onSelectionChanged` (do
-            selections <- treeSelectionGetSelectedRows sel
-            case selections of
-                [[i]] -> notebookSetCurrentPage nb i
-                _ -> return ())
-
-        hb      <-  hBoxNew False 0
-        sw              <-  scrolledWindowNew Nothing Nothing
-        containerAdd sw listView
-        scrolledWindowSetPolicy sw PolicyNever PolicyAutomatic
-        boxPackStart hb sw PackNatural 0
-        boxPackEnd hb nb PackGrow 7
-        let newInj = (\ v -> mapM_ (\ (ind,setInj) -> setInj (v!!ind))
-                                            (zip [0..] setInjs))
-        let newExt = (\ v -> liftM trans (mapM
+buildGenericEditor pairList = buildEditorPrim pairList
+    (mapM (\ (_,GenFG des val) ->
+                buildEditor (toGenFieldDescrG des) (GenV val)) pairList)
+    (\setInjs -> (\ v -> mapM_ (\ (ind,setInj) -> setInj (v!!ind))
+                                            (zip [0..] setInjs)))
+    (\ getExts -> (\ v -> liftM trans (mapM
                 (\ (ind,exts) -> exts (v !! ind))
-                                    (zip [0..] getExts)))
-        notifier <- reflectState makeGUIEvent stateR
-        reflectState (propagateEvent notifier notifiers) stateR
-        return (castToWidget hb, newInj, newExt, notifier)
+                                    (zip [0..] getExts))))
   where
     trans maybeList = if and (map isJust maybeList)
                             then Just (map fromJust maybeList)
                             else Nothing
-
-
 
 buildEditor :: FieldDescriptionG alpha -> alpha ->
     StateM (Widget, Injector alpha , alpha -> Extractor alpha, GEvent)
 buildEditor (FieldG _ editorf) v        =   editorf v
 buildEditor (VertBoxG paras descrs) v   =   buildBoxEditor paras descrs Vertical v
 buildEditor (HoriBoxG paras descrs) v   =   buildBoxEditor paras descrs Horizontal v
-buildEditor (TabbedBoxG pairList)     v =   do
+buildEditor (TabbedBoxG pairList)   v   =   buildEditorPrim pairList
+    (mapM (\d -> buildEditor d v) (map snd pairList))
+    (\setInjs -> (\v -> mapM_ (\ setInj -> setInj v) setInjs))
+    (\ getExts -> (\v -> extract v getExts))
+
+buildEditorPrim
+  :: (WidgetClass child) =>
+     [(String, beta)]
+     -> StateM [(child,  Injector alpha, alpha -> Extractor alpha, PEvent GUIEvent)]
+     -> ([Injector alpha] -> Injector gamma)
+     -> ([alpha -> Extractor alpha] -> gamma -> Extractor gamma)
+     -> StateM (Widget, Injector gamma, gamma -> Extractor gamma, PEvent GUIEvent)
+buildEditorPrim pairList builder injector extractor =   do
     reifyState $ \ stateR -> do
         nb <- newNotebook
         notebookSetShowTabs nb False
-        resList <- reflectState (mapM (\d -> buildEditor d v) (map snd pairList)) stateR
+        resList <- reflectState builder stateR
         let (widgets, setInjs, getExts, notifiers) = unzip4 resList
 
         mapM_ (\ (labelString, widget) -> do
@@ -225,11 +194,12 @@ buildEditor (TabbedBoxG pairList)     v =   do
         scrolledWindowSetPolicy sw PolicyNever PolicyAutomatic
         boxPackStart hb sw PackNatural 0
         boxPackEnd hb nb PackGrow 7
-        let newInj = (\v -> mapM_ (\ setInj -> setInj v) setInjs)
-        let newExt = (\v -> extract v getExts)
+        let newInj = injector setInjs
+        let newExt = extractor getExts
         notifier <- reflectState makeGUIEvent stateR
         reflectState (propagateEvent notifier notifiers) stateR
         return (castToWidget hb, newInj, newExt, notifier)
+
 
 buildBoxEditor :: Parameters -> [FieldDescriptionG alpha] -> Direction -> alpha
     -> StateM (Widget, Injector alpha , alpha -> Extractor alpha , GEvent)

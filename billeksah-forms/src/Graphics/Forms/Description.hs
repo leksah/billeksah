@@ -29,20 +29,17 @@ import Graphics.Session
 import Base
 
 import Graphics.UI.Gtk
-import Control.Monad
 import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.ParserCombinators.Parsec as P
 import Data.Version (Version(..))
-import Data.Typeable (Typeable)
 import qualified Data.Map as Map (empty)
 import Base.Preferences (validatePrefs)
-import Graphics.Panes (Direction(..))
 import Graphics.Forms.Composite
        (pairEditor, ColumnDescr(..), multisetEditor)
 import Graphics.Forms.Simple (genericEditor, stringEditor)
 import Data.List (sortBy)
 import Graphics.Panes.Preferences
-       (PreferencesPane(..), openPreferencesPane)
+       (PreferencesPane, openPreferencesPane)
 
 -- ----------------------------------------------
 -- * It's a plugin
@@ -90,7 +87,7 @@ panesPrefs =
                     (stringEditor (\s -> not (null s)) True,defaultParams)),defaultParams)
                 (Just (sortBy (\(a,_) (a2,_) -> compare a a2)))
                 (Just (\(a,_) (a2,_) -> a == a2)))
-            (\i -> return ())
+            (\_i -> return ())
     ,   mkField
             (("Name", ParaString "Pane path for category") <<<
             ("Shadow", ParaShadow ShadowIn) <<<
@@ -111,7 +108,7 @@ panesPrefs =
                     (genericEditor,defaultParams)),defaultParams)
                 (Just (sortBy (\(a,_) (a2,_) -> compare a a2)))
                 (Just (\(a,_) (a2,_) -> a == a2)))
-            (\i -> return ())
+            (\_i -> return ())
     ,   mkField
             (("Name", ParaString "Default pane path") <<< defaultParams)
             (PP.text . show)
@@ -119,10 +116,10 @@ panesPrefs =
             ppDefaultPath
             (\b a -> a{ppDefaultPath = b})
             genericEditor
-            (\i -> return ())]
+            (\_i -> return ())]
 
 formsInit2 :: BaseEvent -> PEvent FormsEvent -> StateM ()
-formsInit2 baseEvent myEvent = do
+formsInit2 _baseEvent _myEvent = do
     message Debug ("init2 " ++ pluginNameForms)
     RegisterPrefs allPrefs <- triggerFormsEvent
         (RegisterPrefs [("Frame",GenF panesPrefs defaultPanePrefs)])
@@ -146,6 +143,7 @@ myPaneTypes :: [(String,GenPane)]
 myPaneTypes =
     [asRegisterType (undefined :: PreferencesPane)]
 
+initialRegister :: StateM (Maybe String)
 initialRegister = do
     registerState GuiHandlerStateSel (Handlers Map.empty)
     registerState GtkEventsStateSel (GtkRegMap Map.empty)
@@ -169,7 +167,8 @@ mkField parameters printer parser getter setter editor applicator  =
                 PP.$$ (PP.nest 15 (printer (getter dat)))
                 PP.$$ (PP.nest 5 (case getPara "Synopsis" parameters of
                                     ParaString "" -> PP.empty
-                                    ParaString str -> PP.text $"--" ++ str)))
+                                    ParaString str -> PP.text $"--" ++ str
+                                    _ -> error "Description>>mkField: impossible")))
         (\ dat -> P.try (do
             symbol (let ParaString str = getPara "Name" parameters in str)
             colon
