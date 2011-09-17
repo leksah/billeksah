@@ -38,7 +38,6 @@ import Graphics.Forms.Build
 import Graphics.Forms.Simple
 import Graphics.Forms.GUIEvent
 import Graphics.Forms.Default
-import Base.Event
 import Base.State
 import Base.MyMissing (forceJust)
 import Graphics.Pane (Direction(..), castCID)
@@ -52,17 +51,10 @@ import Data.IORef
 import Data.Maybe
 import Data.List (nubBy, sortBy, nub, sort, elemIndex)
 import Distribution.Simple
-    (orEarlierVersion,
-     orLaterVersion,
-     VersionRange(..),
-     PackageName(..),
-     Dependency(..),
-     PackageIdentifier(..))
+    (PackageName(..))
 import Distribution.Text (simpleParse, display)
-import Distribution.Package (pkgName)
 import Data.Version (Version(..))
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk (Event(..))
-import Debug.Trace (trace)
 import Data.Typeable (Typeable)
 
 
@@ -75,8 +67,8 @@ pairEditor (fstEd,fstPara) (sndEd,sndPara) parameters notifier = do
     noti1   <- makeGUIEvent
     noti2   <- makeGUIEvent
     propagateGUIEvent notifier [noti1,noti2] allGUIEvents
-    fst@(fstFrame,inj1,ext1) <- fstEd fstPara noti1
-    snd@(sndFrame,inj2,ext2) <- sndEd sndPara noti2
+    fst@(fstFrame,inj1,_ext1) <- fstEd fstPara noti1
+    snd@(sndFrame,inj2,_ext2) <- sndEd sndPara noti2
     mkEditor
         (\widget (v1,v2) -> reifyState $ \ stateR -> do
             core <- readIORef coreRef
@@ -89,6 +81,7 @@ pairEditor (fstEd,fstPara) (sndEd,sndPara) parameters notifier = do
                         ParaDir Vertical -> do
                             b <- vBoxNew False 1
                             return (castToBox b)
+                        _ -> error "Composite>>pairEditor"
                     boxPackStart box fstFrame PackGrow 0
                     boxPackStart box sndFrame PackGrow 0
                     containerAdd widget box
@@ -123,9 +116,9 @@ tupel3Editor p1 p2 p3 parameters notifier = do
     noti2   <- makeGUIEvent
     noti3   <- makeGUIEvent
     propagateGUIEvent notifier [noti1,noti2,noti3] (Clicked : allGUIEvents)
-    r1@(frame1,inj1,ext1) <- (fst p1) (snd p1) noti1
-    r2@(frame2,inj2,ext2) <- (fst p2) (snd p2) noti2
-    r3@(frame3,inj3,ext3) <- (fst p3) (snd p3) noti3
+    r1@(frame1,inj1,_ext1) <- (fst p1) (snd p1) noti1
+    r2@(frame2,inj2,_ext2) <- (fst p2) (snd p2) noti2
+    r3@(frame3,inj3,_ext3) <- (fst p3) (snd p3) noti3
     mkEditor
         (\widget (v1,v2,v3) -> reifyState $ \ stateR -> do
             core <- readIORef coreRef
@@ -138,6 +131,7 @@ tupel3Editor p1 p2 p3 parameters notifier = do
                         ParaDir Vertical -> do
                             b <- vBoxNew False 1
                             return (castToBox b)
+                        _ -> error "Composite>>tupel3Editor"
                     boxPackStart box frame1 PackGrow 0
                     boxPackStart box frame2 PackGrow 0
                     boxPackStart box frame3 PackGrow 0
@@ -174,8 +168,8 @@ splitEditor (fstEd,fstPara) (sndEd,sndPara) parameters notifier = do
     noti1   <- makeGUIEvent
     noti2   <- makeGUIEvent
     propagateGUIEvent notifier [noti1,noti2] allGUIEvents
-    fst@(fstFrame,inj1,ext1) <- fstEd fstPara noti1
-    snd@(sndFrame,inj2,ext2) <- sndEd sndPara noti2
+    fst@(fstFrame,inj1,_ext1) <- fstEd fstPara noti1
+    snd@(sndFrame,inj2,_ext2) <- sndEd sndPara noti2
     mkEditor
         (\widget (v1,v2) -> reifyState $ \ stateR -> do
             core <- readIORef coreRef
@@ -186,6 +180,7 @@ splitEditor (fstEd,fstPara) (sndEd,sndPara) parameters notifier = do
                                                    return (castToPaned h)
                         ParaDir Vertical    -> do  v <- hPanedNew
                                                    return (castToPaned v)
+                        _ -> error "Composite>>splitEditor"
                     panedPack1 paned fstFrame True True
                     panedPack2 paned sndFrame True True
                     containerAdd widget paned
@@ -232,7 +227,8 @@ maybeEditor (childEdit, childParams) positive boolLabel parameters notifier = do
                         ParaDir Vertical -> do
                             b <- vBoxNew False 1
                             return (castToBox b)
-                    be@(boolFrame,inj1,ext1)  <- reflectState (boolEditor
+                        _ -> error "Composite>>maybeEditor"
+                    be@(boolFrame,inj1,_ext1)  <- reflectState (boolEditor
                             (("Name",ParaString boolLabel) <<< defaultParams)
                         notifierBool) stateR
                     boxPackStart box boolFrame PackNatural 0
@@ -244,7 +240,7 @@ maybeEditor (childEdit, childParams) positive boolLabel parameters notifier = do
                         case mbVal of
                             Nothing  -> inj1 (not positive)
                             Just val -> reifyState $ \ stateR -> do
-                                (childWidget,inj2,ext2) <- reflectState(
+                                (childWidget,inj2,_ext2) <- reflectState(
                                     getChildEditor childRef childEdit childParams cNoti) stateR
                                 boxPackEnd box childWidget PackGrow 0
                                 widgetShowAll childWidget
@@ -252,7 +248,7 @@ maybeEditor (childEdit, childParams) positive boolLabel parameters notifier = do
                                     inj1 positive
                                     inj2 val) stateR) stateR
                     writeIORef coreRef (Just (be,box))
-                Just (be@(boolFrame,inj1,extt),box) -> do
+                Just ((_boolFrame,inj1,_extt),box) -> do
                     hasChild <- hasChildEditor childRef
                     case mbVal of
                         Nothing ->
@@ -285,7 +281,7 @@ maybeEditor (childEdit, childParams) positive boolLabel parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing  -> return Nothing
-                Just (be@(boolFrame,inj1,ext1),_) -> do
+                Just ((_boolFrame,_inj1,ext1),_) -> do
                     bool <- reflectState ext1 stateR
                     case bool of
                         Nothing -> return Nothing
@@ -296,15 +292,15 @@ maybeEditor (childEdit, childParams) positive boolLabel parameters notifier = do
                             case value of
                                 Nothing -> return Nothing
                                 Just value -> return (Just (Just value))
-                        otherwise -> return (Just Nothing))
+                        _ -> return (Just Nothing))
         parameters
         notifier
     where
-    onClickedHandler widget coreRef childRef cNoti event = do
+    onClickedHandler _widget coreRef childRef cNoti event = do
         core <- liftIO $ readIORef coreRef
         case core of
             Nothing  -> error "Impossible"
-            Just (be@(boolFrame,inj1,ext1),vBox) -> do
+            Just ((_boolFrame,_inj1,ext1),vBox) -> do
                 mbBool <- ext1
                 case mbBool of
                     Just bool ->
@@ -315,8 +311,8 @@ maybeEditor (childEdit, childParams) positive boolLabel parameters notifier = do
                                     (childWidget,_,_) <- getChildEditor childRef childEdit childParams cNoti
                                     liftIO $ widgetHideAll childWidget
                             else do
-                                hasChild <- hasChildEditor childRef
-                                (childWidget,inj2,ext2) <- getChildEditor childRef childEdit childParams cNoti
+                                _hasChild <- hasChildEditor childRef
+                                (childWidget,inj2,_ext2) <- getChildEditor childRef childEdit childParams cNoti
                                 children <- liftIO $ containerGetChildren vBox
                                 unless (elem childWidget children) $
                                     liftIO $ boxPackEnd vBox childWidget PackNatural 0
@@ -329,7 +325,7 @@ maybeEditor (childEdit, childParams) positive boolLabel parameters notifier = do
         case mb of
             Just editor -> return editor
             Nothing -> do
-                let val = childEditor
+                let _val = childEditor
                 editor@(_,_,_) <- reflectState (childEditor childParams cNoti) stateR
                 reflectState (propagateGUIEvent notifier [cNoti] allGUIEvents) stateR
                 writeIORef childRef (Just editor)
@@ -361,7 +357,8 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
                         ParaDir Vertical -> do
                             b <- vBoxNew False 1
                             return (castToBox b)
-                    be@(boolFrame,inj1,ext1) <- reflectState (boolEditor
+                        _ -> error "Composite>>disableEditor"
+                    be@(boolFrame,inj1,_ext1) <- reflectState (boolEditor
                         (("Name",ParaString boolLabel) <<< defaultParams)
                         notifierBool) stateR
                     boxPackStart box boolFrame PackNatural 0
@@ -372,7 +369,7 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
                         propagateGUIEvent notifier [notifierBool] [MayHaveChanged]) stateR
                     case mbVal of
                         (False,val) -> do
-                            (childWidget,inj2,ext2) <- reflectState (
+                            (childWidget,inj2,_ext2) <- reflectState (
                                 getChildEditor childRef childEdit childParams cNoti) stateR
                             boxPackEnd box childWidget PackGrow 0
                             widgetShowAll childWidget
@@ -381,7 +378,7 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
                                 inj2 val) stateR
                             widgetSetSensitive childWidget False
                         (True,val) -> do
-                            (childWidget,inj2,ext2) <- reflectState (
+                            (childWidget,inj2,_ext2) <- reflectState (
                                 getChildEditor childRef childEdit childParams cNoti) stateR
                             boxPackEnd box childWidget PackGrow 0
                             widgetShowAll childWidget
@@ -390,10 +387,10 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
                                 inj2 val) stateR
                             widgetSetSensitive childWidget True
                     writeIORef coreRef (Just (be,box))
-                Just (be@(boolFrame,inj1,extt),box) -> do
+                Just ((_boolFrame,inj1,_extt),box) -> do
                     hasChild <- hasChildEditor childRef
                     case mbVal of
-                        (False,val) ->
+                        (False,_val) ->
                             if hasChild
                                 then do
                                     (childWidget,_,_) <- reflectState (
@@ -423,7 +420,7 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
             core <- liftIO $ readIORef coreRef
             case core of
                 Nothing  -> return Nothing
-                Just (be@(boolFrame,inj1,ext1),_) -> do
+                Just ((_boolFrame,_inj1,ext1),_) -> do
                     bool <- ext1
                     case bool of
                         Nothing -> return Nothing
@@ -433,7 +430,7 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
                             case value of
                                 Nothing -> return Nothing
                                 Just value -> return (Just (True, value))
-                        otherwise -> do
+                        _ -> do
                             (_,_,ext2) <- getChildEditor childRef childEdit childParams cNoti
                             value <- ext2
                             case value of
@@ -442,11 +439,11 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
         parameters
         notifier
     where
-    onClickedHandler widget coreRef childRef cNoti event = do
+    onClickedHandler _widget coreRef childRef cNoti event = do
         core <- liftIO $ readIORef coreRef
         case core of
             Nothing  -> error "Impossible"
-            Just (be@(boolFrame,inj1,ext1),vBox) -> do
+            Just ((_boolFrame,_inj1,ext1),vBox) -> do
                 mbBool <- ext1
                 case mbBool of
                     Just bool ->
@@ -475,7 +472,7 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
         case mb of
             Just editor -> return editor
             Nothing -> do
-                let val = childEditor
+                let _val = childEditor
                 editor@(_,_,_) <- childEditor childParams cNoti
                 propagateGUIEvent notifier [cNoti] allGUIEvents
                 liftIO $ writeIORef childRef (Just editor)
@@ -490,15 +487,15 @@ disableEditor (childEdit, childParams) positive boolLabel parameters notifier = 
 eitherOrEditor :: (Default alpha, Default beta) => (Editor alpha, Parameters) ->
                         (Editor beta, Parameters) -> String -> Editor (Either alpha beta)
 eitherOrEditor (leftEditor,leftParams) (rightEditor,rightParams)
-            label2 parameters notifier = do
+            _label2 parameters notifier = do
     coreRef <- liftIO $ newIORef Nothing
     noti1 <- makeGUIEvent
     noti2 <- makeGUIEvent
     noti3 <- makeGUIEvent
     propagateGUIEvent notifier [noti1,noti2,noti3] allGUIEvents
-    be@(boolFrame,inj1,ext1) <- boolEditor2  (getParaS "Name" rightParams) leftParams noti1
-    le@(leftFrame,inj2,ext2) <- leftEditor (("Name", ParaString "") <<< leftParams) noti2
-    re@(rightFrame,inj3,ext3) <- rightEditor (("Name", ParaString "") <<<rightParams) noti3
+    be@(boolFrame,inj1,_ext1) <- boolEditor2  (getParaS "Name" rightParams) leftParams noti1
+    le@(leftFrame,inj2,_ext2) <- leftEditor (("Name", ParaString "") <<< leftParams) noti2
+    re@(rightFrame,inj3,_ext3) <- rightEditor (("Name", ParaString "") <<<rightParams) noti3
     mkEditor
         (\widget v -> do
             core <- liftIO $ readIORef coreRef
@@ -512,6 +509,7 @@ eitherOrEditor (leftEditor,leftParams) (rightEditor,rightParams)
                         ParaDir Vertical -> do
                             b <- liftIO $ vBoxNew False 1
                             return (castToBox b)
+                        _ -> error "Composite>>eitherOrEditor"
                     liftIO $ boxPackStart box boolFrame PackNatural 0
                     liftIO $ containerAdd widget box
                     case v of
@@ -560,11 +558,11 @@ eitherOrEditor (leftEditor,leftParams) (rightEditor,rightParams)
         (("Name",ParaString "") <<< parameters)
         notifier
     where
-    onClickedHandler widget coreRef event =  do
+    onClickedHandler _widget coreRef event =  do
         core <- liftIO $ readIORef coreRef
         case core of
             Nothing  -> error "Impossible"
-            Just (be@(_,_,ext1),(leftFrame,_,_),(rightFrame,_,_),box) -> do
+            Just ((_,_,ext1),(leftFrame,_,_),(rightFrame,_,_),box) -> do
                 mbBool <- ext1
                 case mbBool of
                     Just bool ->
@@ -602,6 +600,7 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                             b  <- liftIO $ vBoxNew False 1
                             bb <- liftIO $ hButtonBoxNew
                             return (castToBox b,castToButtonBox bb)
+                        _ -> error "Composite>>selectionEditor"
                     addButton   <- liftIO $ buttonNewFromStock "gtk-add"
                     removeButton <- liftIO $ buttonNewFromStock "gtk-remove"
                     deleteButton <- liftIO $ buttonNewFromStock "gtk-delete"
@@ -657,12 +656,8 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                                 Nothing -> return ()
                                 Just func -> do
                                     set renderer [cellTextEditable := True]
-                                    on renderer edited (\ (p:_) string -> do
-                                        row <- listStoreGetValue listStoreSelected p
-                                        listStoreSetValue listStoreSelected p (func row string)
-                                        reflectState (triggerGUIEvent notifier
-                                            dummyGUIEvent {geSelector = MayHaveChanged}) stateR
-                                        return ())
+                                    on renderer edited
+                                        (applyFunc listStoreSelected func stateR)
                                     return ()
                             cellLayoutPackStart col renderer True
                             cellLayoutSetAttributes col renderer listStoreSelected func
@@ -678,7 +673,7 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                         scrolledWindowSetPolicy sw2 PolicyAutomatic PolicyAutomatic
                         sel2         <-  treeViewGetSelection treeViewUnselected
                         treeSelectionSetMode sel2 SelectionMultiple
-                        mapM_ (\(str,func, mbFunc2) -> do
+                        mapM_ (\(str,func, _mbFunc2) -> do
                             col <- treeViewColumnNew
                             treeViewColumnSetTitle  col str
                             treeViewColumnSetResizable col True
@@ -720,7 +715,7 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                             Just handler -> do
                                 deleteButton `onClicked` do
                                     treePaths   <- treeSelectionGetSelectedRows sel2
-                                    unselected  <- listStoreToList listStoreUnselected
+                                    _unselected  <- listStoreToList listStoreUnselected
                                     toDelete    <- mapM (\(i:_) -> listStoreGetValue
                                                                 listStoreUnselected i)
                                                         treePaths
@@ -744,6 +739,13 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
         (("MinSize",ParaSize (-1,-1)) <<< parameters)
         notifier
   where
+    applyFunc listStoreSelected func stateR (p:_) string  =  do
+        row <- listStoreGetValue listStoreSelected p
+        listStoreSetValue listStoreSelected p (func row string)
+        reflectState (triggerGUIEvent notifier
+            dummyGUIEvent {geSelector = MayHaveChanged}) stateR
+        return ()
+    applyFunc  _ _ _ [] _ =  error "Composite>>selectionEditor"
     fill selected choices listStoreSelected listStoreUnselected =
         let selected' = case mbTest of
                             Nothing -> nub selected
@@ -778,7 +780,7 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                             mbVal <- case rows of
                                         ([i]:_) -> liftM (Just . GenSelection)
                                             (listStoreGetValue listStore i)
-                                        otherwise -> return Nothing
+                                        _ -> return Nothing
 
                             reflectState (triggerGUIEvent notifier (dummyGUIEvent {
                                 geSelector = Selection,
@@ -786,7 +788,7 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                                 geMbSelection = mbVal,
                                 geGtkReturn = True})) stateR
                             return False
-                    otherwise -> return False)
+                    _ -> return False)
 
 
 
@@ -849,7 +851,7 @@ multisetEditor (ColumnDescr showHeaders columnsDD) (singleEditor, sParams) mbSor
                         scrolledWindowSetPolicy sw PolicyAutomatic PolicyAutomatic
                         sel         <-  treeViewGetSelection treeView
                         treeSelectionSetMode sel SelectionSingle
-                        mapM_ (\(str,func,mbFunc2) -> do
+                        mapM_ (\(str,func,_mbFunc2) -> do
                             col <- treeViewColumnNew
                             treeViewColumnSetTitle  col str
                             treeViewColumnSetResizable col True

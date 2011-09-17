@@ -17,6 +17,7 @@ module Graphics.Forms.Simple (
     noEditor
 ,   boolEditor
 ,   boolEditor2
+,   buttonEditor
 ,   enumEditor
 ,   clickEditor
 ,   stringEditor
@@ -44,13 +45,10 @@ import Graphics.Forms.GUIEvent
 import Graphics.Panes (Direction(..))
 
 import Graphics.UI.Gtk hiding (eventKeyName, eventModifier)
-import qualified Graphics.UI.Gtk as Gtk
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
 import Data.List
-import Data.Maybe
-import System.FilePath.Posix
 import Graphics.UI.Gtk.Gdk.Events (Event(..))
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk (Event(..))
 import Unsafe.Coerce (unsafeCoerce)
@@ -71,7 +69,7 @@ instance ButtonClass Widget
 noEditor :: alpha -> Editor alpha
 noEditor proto parameters notifier =
     mkEditor
-        (\ widget _ -> return ())
+        (\ _ _ -> return ())
         (return (Just proto))
         parameters
         notifier
@@ -144,7 +142,7 @@ boolEditor2 label2 parameters notifier = do
             core <- readIORef coreRef
             case core of
                 Nothing -> return Nothing
-                Just (radio1,radio2) -> do
+                Just (radio1,_) -> do
                     r <- toggleButtonGetActive radio1
                     return (Just r))
         (("Name", ParaString "") <<< parameters)
@@ -208,13 +206,14 @@ clickEditor :: Bool -> Editor ()
 clickEditor canDefault parameters notifier = do
     coreRef <- liftIO $ newIORef Nothing
     mkEditor
-        (\widget bool -> reifyState $ \ stateR -> do
+        (\widget _ -> reifyState $ \ stateR -> do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
                     button <- case getPara "StockId" parameters of
                         ParaString "" ->   buttonNewWithLabel (getParaS "Name" parameters)
                         ParaString st ->   buttonNewFromStock st
+                        _             -> error "Simnple>>clickEditor: Impossible type"
                     widgetSetName button (getParaS "Name" parameters)
                     containerAdd widget button
                     reflectState(
@@ -223,7 +222,7 @@ clickEditor canDefault parameters notifier = do
                     when canDefault $ do
                         set button [widgetCanDefault := True]
                         widgetGrabDefault button
-                Just button -> return ())
+                Just _ -> return ())
         (return (Just ()))
         (("Name",ParaString "") <<< parameters)
         notifier
@@ -234,7 +233,7 @@ imageEditor :: Editor StockId
 imageEditor parameters notifier = do
     coreRef <- liftIO $ newIORef Nothing
     mkEditor
-        (\widget stockId -> reifyState $ \ stateR -> do
+        (\widget stockId -> reifyState $ \ _ -> do
             core <- readIORef coreRef
             case core of
                 Nothing  -> do
@@ -242,7 +241,7 @@ imageEditor parameters notifier = do
                     widgetSetName image (getParaS "Name" parameters)
                     containerAdd widget image
                     writeIORef coreRef (Just (image,stockId))
-                Just (image,stockId2) -> imageSetFromStock image stockId IconSizeLargeToolbar)
+                Just (image,_) -> imageSetFromStock image stockId IconSizeLargeToolbar)
         (liftIO $ do
             core <- readIORef coreRef
             case core of
@@ -308,14 +307,14 @@ multilineStringEditor parameters notifier = do
                     buffer          <-  textViewGetBuffer aTextView
                     textBufferSetText buffer string
                     writeIORef coreRef (Just (aScrolledWindow,aTextView))
-                Just (aScrolledWindow,aTextView) -> do
+                Just (_,aTextView) -> do
                     buffer          <-  textViewGetBuffer aTextView
                     textBufferSetText buffer string)
         (liftIO $ do
             core <- readIORef coreRef
             case core of
                 Nothing -> return Nothing
-                Just (aScrolledWindow, aTextView) -> do
+                Just (_aScrolledWindow, aTextView) -> do
                     buffer          <-  textViewGetBuffer aTextView
                     start           <-  textBufferGetStartIter buffer
                     end             <-  textBufferGetEndIter buffer
@@ -396,7 +395,7 @@ buttonEditor parameters notifier = do
                         mapM_ (activateGUIEvent (castToWidget button) notifier )
                             (Clicked:genericGUIEvents)) stateR
                     writeIORef coreRef (Just button)
-                Just button -> return ())
+                Just _button -> return ())
         (return (Just ()))
         parameters
         notifier
@@ -445,7 +444,7 @@ comboSelectionEditor list showF parameters notifier = do
                     ind <- comboBoxGetActive combo
                     case ind of
                         (-1)   -> return Nothing
-                        otherwise  -> return (Just (list !! ind)))
+                        _      -> return (Just (list !! ind)))
         parameters
         notifier
 
@@ -483,7 +482,7 @@ multiselectionEditor parameters notifier = do
                     --let inds = catMaybes $map (\obj -> elemIndex obj list) objs
                     --mapM_ (\i -> treeSelectionSelectPath sel [i]) inds
                     writeIORef coreRef (Just (listView,listStore))
-                Just (listView,listStore) -> do
+                Just (_listView,listStore) -> do
                     listStoreClear listStore
                     mapM_ (listStoreAppend listStore) objs)
         (liftIO $ do
@@ -493,7 +492,12 @@ multiselectionEditor parameters notifier = do
                 Just (listView,listStore) -> do
                     sel         <- treeViewGetSelection listView
                     treePath    <- treeSelectionGetSelectedRows sel
-                    values      <- mapM (\[i] -> listStoreGetValue listStore i) treePath
+                    values      <- mapM (\ l ->
+                                        case l of
+                                            [i] -> listStoreGetValue listStore i
+                                            _   -> error
+                                                    "Simple>>multiselectionEditor")
+                                                    treePath
                     return (Just values))
         parameters
         notifier
@@ -551,21 +555,26 @@ staticListMultiEditor list showF parameters notifier = do
                             ("Return", _, _) -> do
                                 sel <- treeViewGetSelection listView
                                 rows <- treeSelectionGetSelectedRows sel
-                                mapM_ (\ (i:_) -> do
-                                    val <- listStoreGetValue listStore i
-                                    listStoreSetValue listStore i (not (fst val),snd val)) rows
+                                mapM_ (\ l ->
+                                    case l of
+                                        (i:_) -> do
+                                            val <- listStoreGetValue listStore i
+                                            listStoreSetValue listStore i
+                                                (not (fst val),snd val)
+                                        [] -> error "Simple>>staticListMultiEditor"
+                                            ) rows
                                 return True
                             _ -> return False)
                     writeIORef coreRef (Just (listView,listStore))
-                Just (listView,listStore) -> do
-                    let model = map (\e -> (elem e objs,e)) list
+                Just (_listView,listStore) -> do
+                    let _model = map (\e -> (elem e objs,e)) list
                     listStoreClear listStore
                     mapM_ (listStoreAppend listStore) $ map (\e -> (elem e objs,e)) list)
         (liftIO $ do
             core <- readIORef coreRef
             case core of
                 Nothing -> return Nothing
-                Just (listView,listStore) -> do
+                Just (_listView,listStore) -> do
                     model <- listStoreToList listStore
                     return (Just (map snd $ filter (\e -> fst e) model)))
         parameters
@@ -594,7 +603,8 @@ staticListEditor list showF parameters notifier = do
                     treeSelectionSetMode sel
                         (case getPara "MultiSel" parameters of
                             ParaBool True  -> SelectionMultiple
-                            ParaBool False -> SelectionSingle)
+                            ParaBool False -> SelectionSingle
+                            _ -> error "Simple>>staticListEditor")
                     renderer <- cellRendererTextNew
                     col <- treeViewColumnNew
                     treeViewAppendColumn listView col
@@ -641,7 +651,7 @@ staticListEditor list showF parameters notifier = do
 -- | Editor for the selection of a file path in the form of a text entry and a button,
 -- | which opens a gtk file chooser
 fileEditor :: Maybe FilePath -> FileChooserAction -> String -> Editor FilePath
-fileEditor mbFilePath action buttonName parameters notifier = do
+fileEditor _mbFilePath action buttonName parameters notifier = do
     coreRef <- liftIO $ newIORef Nothing
     mkEditor
         (\widget filePath -> reifyState $ \ stateR -> do
@@ -668,6 +678,7 @@ fileEditor mbFilePath action buttonName parameters notifier = do
                                 ParaDir Vertical    -> do
                                     r <- vBoxNew False 1
                                     return (castToBox r)
+                                _ -> error "Simple>>fileEditor"
                     boxPackStart box entry PackGrow 0
                     boxPackEnd box button PackNatural 0
                     containerAdd widget box
@@ -822,7 +833,7 @@ otherEditor func parameters notifier = do
                         registerGUIEvent notifier [Clicked] (buttonHandler coreRef)
                         retriggerAsChanged notifier [KeyPressed,ButtonPressed,Clicked]) stateR
                     writeIORef coreRef (Just (button,val))
-                Just (button, oldval) -> writeIORef coreRef (Just (button, val)))
+                Just (button, _oldval) -> writeIORef coreRef (Just (button, val)))
         (liftIO $ do
             core <- readIORef coreRef
             case core of

@@ -15,7 +15,6 @@
 module Base.Preferences (
     loadPrefs
 ,   savePrefs
-,   editPrefs
 ,   validatePrefs
 
 ,   getPrefs
@@ -27,15 +26,10 @@ import Base
 
 import Graphics.Forms.Parameters
 import Graphics.Forms.Basics
-import Graphics.Forms.Build (GenFieldDescriptionG(..),toFieldDescriptionG)
 
 import Data.List ((\\), nub)
-import qualified Text.PrettyPrint as PP (Doc)
-import qualified Text.ParserCombinators.Parsec as P (CharParser)
-import Graphics.UI.Gtk (Widget)
-import Data.Typeable (cast, Typeable)
+import Data.Typeable (Typeable(..), Typeable)
 import Control.Monad.IO.Class (MonadIO(..))
-import Graphics.Panes.Preferences (openPreferencesPane)
 
 -------------------------------------
 -- * The functions to handle preferences
@@ -58,17 +52,18 @@ validatePrefs prefsDescr =
 loadPrefs :: FilePath -> StateM ()
 loadPrefs fp          =  do
     allPrefs <- getState PrefsDescrState
-    let allPrefsS = map (\(s,GenF fda a) -> (s, GenFS (toFieldDescriptionS fda) a)) allPrefs
+    let allPrefsS = map (\(s,GenF descr val) -> (s, GenFS (toFieldDescriptionS descr) val)) allPrefs
     Left loadedPrefs <- liftIO $ readFields fp (Left allPrefsS)
     let newPrefs = map (exchangeValues loadedPrefs) allPrefs
     setState PrefsDescrState newPrefs
     triggerFormsEvent PrefsChanged >> return ()
   where
+    exchangeValues :: [(String, GenFieldDescriptionS)] -> (String, GenFieldDescription)
+        -> (String, GenFieldDescription)
     exchangeValues loadedPrefs (s1, GenF fda a) =
-        case [gfs | (s2,gfs) <- loadedPrefs, s1 == s2] of
-            [GenFS _ newValue] -> case cast newValue of
-                                    Nothing -> error "Preferences>>loadPrefs: castError"
-                                    Just nv -> (s1, GenF fda nv)
+        case [gen | (s2, gen) <- loadedPrefs, s1 == s2] of
+            [GenFS _ newValue] ->   let nv = myCast "Preferences>>loadPrefs:" newValue
+                            in (s1, GenF fda nv)
             _ -> (s1, GenF fda a)
 
 --
@@ -81,13 +76,11 @@ savePrefs fp          =  do
     let string = showFields (Left allPrefsS)
     liftIO $ writeFile fp string
 
---
--- | Visaully edit preferences.
---
-editPrefs             ::  StateM ()
-editPrefs             =  openPreferencesPane
-
-
+----
+---- | Visaully edit preferences.
+----
+--editPrefs             ::  StateM ()
+--editPrefs             =  openPreferencesPane
 
 --
 -- | Gets a preference value from a category and a key
@@ -95,27 +88,25 @@ editPrefs             =  openPreferencesPane
 getPrefs :: Typeable alpha => String -> StateM alpha
 getPrefs category = do
     allPrefs <- getState PrefsDescrState
-    case [ gd | (s,gd) <- allPrefs, s == category] of
-        [GenF _ a] -> case cast a of
-                            Just a' -> return a'
-                            Nothing -> error
-                                ("Preferences>>getPrefs: cast error for category: "
-                                ++ category)
-        otherwise -> error ("Preferences>>getPrefs: category not found: " ++ category)
-
+    case [ genF | (s,genF) <- allPrefs, s == category] of
+        [GenF _gd a] ->
+            let a' = myCast ("Preferences>>getPrefs:" ++
+                                "cast error for category: " ++ category) a
+            in return a'
+        _        -> error ("Preferences>>getPrefs: category not found: " ++ category)
 
 --
 -- | Sets a preference value for a category and a key
 --
-setPrefs :: Typeable alpha => String -> alpha -> StateM ()
+setPrefs :: (Eq alpha , Typeable alpha) => String -> alpha -> StateM ()
 setPrefs category value = do
     allPrefs <- getState PrefsDescrState
     setState PrefsDescrState
-        (map (\ old@(s,(GenF des a)) ->
+        (map (\ old@(s,GenF des a) ->
             if s == category
-                then case cast value of
-                    Just v -> (s,GenF des v)
-                    _ -> error ("Preferences>>setPrefs: cast error for category: "
+                then if typeOf a == typeOf value
+                    then (s,GenF des (myCast "setPrefs" value))
+                    else  error ("Preferences>>setPrefs: type error for category: "
                                 ++ category)
                 else old)
             allPrefs)
@@ -137,7 +128,7 @@ ppToS (Field para print pars _ _) =
 ppToS _                           = error "DescriptionPP.ppToS Can't transform"
 
 flattenFieldDescription :: FieldDescription alpha  -> [FieldDescription alpha]
-flattenFieldDescription (VertBox paras descrs)  =   concatMap flattenFieldDescription descrs
-flattenFieldDescription (HoriBox paras descrs)  =   concatMap flattenFieldDescription descrs
+flattenFieldDescription (VertBox _paras descrs)  =   concatMap flattenFieldDescription descrs
+flattenFieldDescription (HoriBox _paras descrs)  =   concatMap flattenFieldDescription descrs
 flattenFieldDescription (TabbedBox descrsp)     =   concatMap (flattenFieldDescription . snd) descrsp
 flattenFieldDescription fdpp                  =   [fdpp]

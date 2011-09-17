@@ -1,4 +1,5 @@
-{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ExistentialQuantification, DeriveDataTypeable, FlexibleContexts,
+    ScopedTypeVariables #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.UI.Editor.MakeEditor
@@ -16,10 +17,12 @@
 module Graphics.Forms.Build (
 
     buildEditor
+,   buildGenericEditor
 
 ,   FieldDescriptionG(..)
-,   GenFieldDescriptionG(..)
 ,   toFieldDescriptionG
+,   GenFieldDescriptionG(..)
+,   castFDG
 ,   mkFieldG
 
 ,   extractAndValidate
@@ -32,8 +35,8 @@ module Graphics.Forms.Build (
 ) where
 
 
-import Base.Event
-import Base.State
+import Base
+
 import Graphics.Forms.Parameters
 import Graphics.Forms.Basics
 import Graphics.Forms.GUIEvent
@@ -42,11 +45,9 @@ import Graphics.Panes (Direction(..))
 import Graphics.UI.Gtk
 import Control.Monad
 import Data.List (intersperse, unzip4)
-import Data.Maybe (isNothing)
-import Data.IORef (newIORef)
-import qualified Graphics.UI.Gtk.Gdk.Events as GTK (Event(..))
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Typeable (Typeable)
+import Data.Typeable (Typeable1, Typeable)
+import Data.Maybe (fromJust, isJust)
 
 
 --
@@ -63,32 +64,53 @@ type MkFieldDescriptionG alpha beta =
 --
 -- | A type to describe a field of a record, which can be edited
 -- | alpha is the type of the individual field of the record
-data FieldDescriptionG alpha =  FieldG Parameters (alpha -> StateM (Widget, Injector alpha ,
-                                    alpha -> Extractor alpha , GEvent)) -- Form
+data FieldDescriptionG alpha =  FieldG {
+    fgParameters :: Parameters,
+    fgFieldEditor :: alpha -> StateM (Widget, Injector alpha ,
+                                    alpha -> Extractor alpha , GEvent)} -- Form
     | VertBoxG Parameters [FieldDescriptionG alpha] -- Vertical forms box
     | HoriBoxG Parameters [FieldDescriptionG alpha] -- Horizontal forms box
     | TabbedBoxG [(String,FieldDescriptionG alpha)]   -- Notebook box
+    deriving Typeable
 
-data GenFieldDescriptionG = forall alpha . Typeable alpha => GenFG (FieldDescriptionG alpha) alpha
-
+-- | A type neutral FieldDescription with a type neutral value attached
+data GenFieldDescriptionG = forall alpha . (Typeable alpha, Eq alpha) =>
+    GenFG (FieldDescriptionG alpha) alpha
 
 toFieldDescriptionG :: FieldDescription alpha  -> FieldDescriptionG alpha
-toFieldDescriptionG (VertBox paras descrs) =  VertBoxG paras
-                                                        (map toFieldDescriptionG descrs)
-toFieldDescriptionG (HoriBox paras descrs) =  HoriBoxG paras
-                                                        (map toFieldDescriptionG descrs)
-toFieldDescriptionG (TabbedBox descrsp)    =  TabbedBoxG (map (\(s,d) ->
-                                                    (s, toFieldDescriptionG d)) descrsp)
-toFieldDescriptionG (Field parameters fieldPrinter fieldParser fieldEditor applicator) =
+toFieldDescriptionG (VertBox paras descrs) =
+    VertBoxG paras (map toFieldDescriptionG descrs)
+toFieldDescriptionG (HoriBox paras descrs) =
+    HoriBoxG paras (map toFieldDescriptionG descrs)
+toFieldDescriptionG (TabbedBox descrsp)    =
+    TabbedBoxG (map (\(s,d) -> (s, toFieldDescriptionG d)) descrsp)
+toFieldDescriptionG (Field parameters _ _ fieldEditor _) =
     (FieldG parameters fieldEditor)
 
+toGenFieldDescrG :: (Typeable alpha, Eq alpha) => FieldDescriptionG alpha ->
+    FieldDescriptionG GenValue
+toGenFieldDescrG (VertBoxG paras fdl) = VertBoxG paras (map toGenFieldDescrG fdl)
+toGenFieldDescrG (HoriBoxG paras fdl) = HoriBoxG paras (map toGenFieldDescrG fdl)
+toGenFieldDescrG (TabbedBoxG list)    = TabbedBoxG
+        (map (\(s,fd) -> (s,toGenFieldDescrG fd)) list)
+toGenFieldDescrG (FieldG paras fgFieldEditor)
+        = FieldG
+            paras
+            (\ (GenV a) ->
+                let a' = myCast "Basics>>toGenFieldDescrG " a
+                in liftM toFieldEditor (fgFieldEditor a'))
+
+-- | A cast from a type neutral FieldDescription with a type neutral value
+-- to a typed field description with a typed value
+castFDG :: (Typeable alpha, Typeable1 FieldDescription, Typeable GenValue) =>
+    FieldDescriptionG GenValue -> FieldDescriptionG alpha
+castFDG fdGen = myCast "Basics>>castFD:1 " fdGen
 
 parameters :: FieldDescriptionG alpha -> Parameters
-parameters (FieldG p _) = p
-parameters (VertBoxG p _) = p
-parameters (HoriBoxG p _) = p
-parameters (TabbedBoxG _) = defaultParams
-
+parameters (FieldG p _)    = p
+parameters (VertBoxG p _)  = p
+parameters (HoriBoxG p _)  = p
+parameters (TabbedBoxG _)  = defaultParams
 --
 -- | Construct a new notebook
 --
@@ -101,11 +123,69 @@ newNotebook = do
     notebookSetPopup nb True
     return nb
 
-buildEditor :: FieldDescriptionG alpha -> alpha -> StateM (Widget, Injector alpha , alpha -> Extractor alpha ,
-    GEvent)
-buildEditor (FieldG paras editorf) v  =  editorf v
-buildEditor (VertBoxG paras descrs) v =   buildBoxEditor paras descrs Vertical v
-buildEditor (HoriBoxG paras descrs) v =   buildBoxEditor paras descrs Horizontal v
+buildGenericEditor :: [(String,GenFieldDescriptionG)] ->
+    StateM (Widget, Injector [GenValue] , [GenValue] -> Extractor [GenValue], GEvent)
+buildGenericEditor pairList = do
+    reifyState $ \ stateR -> do
+        nb <- newNotebook
+        notebookSetShowTabs nb False
+        resList <- reflectState
+            (mapM (\ (_,GenFG des val) ->
+                buildEditor (toGenFieldDescrG des) (GenV val)) pairList) stateR
+        let (widgets, setInjs, getExts, notifiers) = unzip4 resList
+
+        mapM_ (\ (labelString, widget) -> do
+            sw <- scrolledWindowNew Nothing Nothing
+            scrolledWindowAddWithViewport sw widget
+            scrolledWindowSetPolicy sw PolicyAutomatic PolicyAutomatic
+            notebookAppendPage nb sw labelString)
+             (zip (map fst pairList) widgets)
+        listStore   <- listStoreNew (map fst pairList)
+        listView    <- treeViewNewWithModel listStore
+        widgetSetSizeRequest listView 100 (-1)
+        sel         <- treeViewGetSelection listView
+        treeSelectionSetMode sel SelectionSingle
+        renderer    <- cellRendererTextNew
+        col         <- treeViewColumnNew
+        treeViewAppendColumn listView col
+        cellLayoutPackStart col renderer True
+        cellLayoutSetAttributes col renderer listStore $ \row ->
+            [ cellText := row ]
+        treeViewSetHeadersVisible listView False
+        treeSelectionSelectPath sel [0]
+        notebookSetCurrentPage nb 0
+        sel `onSelectionChanged` (do
+            selections <- treeSelectionGetSelectedRows sel
+            case selections of
+                [[i]] -> notebookSetCurrentPage nb i
+                _ -> return ())
+
+        hb      <-  hBoxNew False 0
+        sw              <-  scrolledWindowNew Nothing Nothing
+        containerAdd sw listView
+        scrolledWindowSetPolicy sw PolicyNever PolicyAutomatic
+        boxPackStart hb sw PackNatural 0
+        boxPackEnd hb nb PackGrow 7
+        let newInj = (\ v -> mapM_ (\ (ind,setInj) -> setInj (v!!ind))
+                                            (zip [0..] setInjs))
+        let newExt = (\ v -> liftM trans (mapM
+                (\ (ind,exts) -> exts (v !! ind))
+                                    (zip [0..] getExts)))
+        notifier <- reflectState makeGUIEvent stateR
+        reflectState (propagateEvent notifier notifiers) stateR
+        return (castToWidget hb, newInj, newExt, notifier)
+  where
+    trans maybeList = if and (map isJust maybeList)
+                            then Just (map fromJust maybeList)
+                            else Nothing
+
+
+
+buildEditor :: FieldDescriptionG alpha -> alpha ->
+    StateM (Widget, Injector alpha , alpha -> Extractor alpha, GEvent)
+buildEditor (FieldG _ editorf) v        =   editorf v
+buildEditor (VertBoxG paras descrs) v   =   buildBoxEditor paras descrs Vertical v
+buildEditor (HoriBoxG paras descrs) v   =   buildBoxEditor paras descrs Horizontal v
 buildEditor (TabbedBoxG pairList)     v =   do
     reifyState $ \ stateR -> do
         nb <- newNotebook
@@ -180,11 +260,11 @@ buildBoxEditor paras descrs dir v = do
             liftIO $ mapM_ (\ (w,p) -> boxPackStart b w p 0) $ zip widgets packParas
             return (castToWidget b, newInj, newExt, notifier)
 
-flattenFieldDescriptionG :: FieldDescriptionG alpha -> [FieldDescriptionG alpha]
-flattenFieldDescriptionG (VertBoxG paras descrs) = concatMap flattenFieldDescriptionG descrs
-flattenFieldDescriptionG (HoriBoxG paras descrs) = concatMap flattenFieldDescriptionG descrs
-flattenFieldDescriptionG (TabbedBoxG descrp)     = concatMap (flattenFieldDescriptionG.snd) descrp
-flattenFieldDescriptionG fd                      =   [fd]
+--flattenFieldDescriptionG :: FieldDescriptionG alpha -> [FieldDescriptionG alpha]
+--flattenFieldDescriptionG (VertBoxG _ descrs) = concatMap flattenFieldDescriptionG descrs
+--flattenFieldDescriptionG (HoriBoxG _ descrs) = concatMap flattenFieldDescriptionG descrs
+--flattenFieldDescriptionG (TabbedBoxG descrp)     = concatMap (flattenFieldDescriptionG.snd) descrp
+--flattenFieldDescriptionG fd                      =   [fd]
 
 -- ------------------------------------------------------------
 -- * Implementation of editing
@@ -214,7 +294,7 @@ mkFieldG name parameters getter setter editor =
 -- | Function to construct an editor
 --
 mkEditor :: (Container -> Injector alpha) -> Extractor alpha -> Editor alpha
-mkEditor injectorC extractor parameters notifier = liftIO $ do
+mkEditor injectorC extractor parameters _ = liftIO $ do
     let ParaAlign (xalign, yalign, xscale, yscale) = getPara "OuterAlignment" parameters
     outerAlig <- alignmentNew xalign yalign xscale yscale
     let ParaPadding (paddingTop, paddingBottom, paddingLeft, paddingRight) = getPara "OuterPadding" parameters

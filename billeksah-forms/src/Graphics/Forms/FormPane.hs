@@ -17,11 +17,14 @@ module Graphics.Forms.FormPane where
 
 import Base
 
-import Graphics.Forms.Build (FieldDescriptionG, buildEditor)
+import Graphics.Forms.Build
+       (GenFieldDescriptionG(..), GenFieldDescriptionG,
+        buildGenericEditor, FieldDescriptionG, buildEditor)
 import Graphics.Forms.GUIEvent
        (registerGUIEvent, dummyGUIEvent, triggerGUIEvent)
 import Graphics.Forms.Basics
-       (Extractor, Injector, GUIEvent(..), GUIEventSelector(..))
+       (GenValue(..), Extractor,
+        Injector, GUIEvent(..), GUIEventSelector(..))
 import Graphics.Frame (setChanged, closePane, Pane)
 import Graphics.Panes (Connections, PanePath, castCID)
 
@@ -42,12 +45,123 @@ data FormPaneDescr alpha beta  =  FormPaneDescr {
 -- Requires a forms description, an initial value and a FormPaneDescr
 buildFormsPane :: Pane beta  => FieldDescriptionG alpha  ->  alpha  -> FormPaneDescr alpha beta
                         -> (PanePath -> Notebook -> Window -> StateM (Maybe beta, Connections))
-buildFormsPane descr val formDescr = \ panePath notebook window -> do
+buildFormsPane descr val formDescr = \ _panePath _notebook window -> do
     reifyState (\ stateR -> do
         ------------------------------------------
         -- Plugin editor
         lastSaved           <- liftIO $ newIORef val
         (widget,inj,ext,notifier) <- reflectState (buildEditor descr val) stateR
+        sw <- scrolledWindowNew Nothing Nothing
+        scrolledWindowAddWithViewport sw widget
+        scrolledWindowSetPolicy sw PolicyAutomatic PolicyAutomatic
+
+        -- Buttons
+        bb                  <-  hButtonBoxNew
+        saveB               <-  buttonNewFromStock "gtk-save"
+        revertB             <-  buttonNewFromStock "gtk-revert-to-saved"
+        closeB              <-  buttonNewFromStock "gtk-close"
+
+        extraButtons        <-  mapM buttonNewFromStock (map fst (fpExtraButtons formDescr))
+
+        widgetSetSensitive saveB False
+        widgetSetSensitive revertB False
+
+        mapM (boxPackStartDefaults bb) extraButtons
+
+        boxPackStartDefaults bb revertB
+        boxPackStartDefaults bb saveB
+        boxPackStartDefaults bb closeB
+
+        validationLabel <- labelNew Nothing
+
+        --Frame
+        vb                  <-  vBoxNew False 0
+        boxPackStart vb sw PackGrow 7
+        boxPackStart vb validationLabel PackNatural 0
+        boxPackEnd vb bb PackNatural 7
+
+        let inj2 = do
+            (\b -> do
+                    liftIO $ writeIORef lastSaved b
+                    inj b)
+
+        let pane  = (fpGetPane formDescr) vb inj2 (ext val)
+
+        --Events
+        cid1 <- saveB `onClicked` (do
+            mbV <- reflectState (ext val) stateR
+            case mbV of
+                Nothing -> return ()
+                Just v -> do
+                    reflectState (do
+                        (fpSaveAction formDescr) v
+                        liftIO $ writeIORef lastSaved v
+                        triggerGUIEvent notifier dummyGUIEvent{geSelector= MayHaveChanged}) stateR
+                    return ())
+
+        cid2 <- revertB `onClicked` (do
+            old <- readIORef lastSaved
+            reflectState (inj old) stateR)
+
+        cid3 <- closeB `onClicked` do
+            (hasChanged',_) <- reflectState (hasChanged ext lastSaved) stateR
+            if not hasChanged'
+                then reflectState (closePane pane >> return ()) stateR
+                else do
+                    md <- messageDialogNew (Just window) []
+                        MessageQuestion
+                        ButtonsYesNo
+                        "Unsaved changes. Close anyway?"
+                    set md [ windowWindowPosition := WinPosCenterOnParent ]
+                    resp <- dialogRun md
+                    widgetDestroy md
+                    case resp of
+                        ResponseYes ->   do
+                            reflectState (closePane pane >> return ()) stateR
+                        _  ->   return ()
+
+        cids <- mapM (\ (button,handler) -> button `onClicked` (reflectState handler stateR))
+            (zip extraButtons (map snd (fpExtraButtons formDescr)))
+
+        reflectState (do
+            registerGUIEvent notifier [MayHaveChanged] (\ e -> do
+                (hasChanged',canExtract) <-  hasChanged ext lastSaved
+                when canExtract $ liftIO $ labelSetMarkup validationLabel ""
+                setChanged pane hasChanged'
+                liftIO $ widgetSetSensitive saveB hasChanged'
+                liftIO $ widgetSetSensitive revertB hasChanged'
+                return (e{geGtkReturn=False}))
+
+            registerGUIEvent notifier [ValidationError] (\e -> do
+                liftIO $ labelSetMarkup validationLabel
+                    ("<span foreground=\"red\" size=\"large\">" ++
+                        "The following fields have invalid values: "
+                        ++ geText e ++ "</span>")
+                return e)
+
+            mapM_ (\ (selectors,handler) -> registerGUIEvent notifier selectors handler)
+                (fpGuiHandlers formDescr)) stateR
+
+        return (Just pane, map castCID ([cid1, cid2, cid3] ++ cids)))
+  where
+    hasChanged ext lastSavedRef = do
+        old <- liftIO $ readIORef lastSavedRef
+        mbP <- ext old
+        return $ case mbP of
+                    Nothing -> (False,False)
+                    Just p -> (not ((fpHasChanged formDescr) p old), True)
+
+
+--
+-- | Returns a builder for a pane
+-- Requires a forms description, an initial value and a FormPaneDescr
+buildGenericFormsPane :: Pane beta  => [(String,GenFieldDescriptionG)]  -> FormPaneDescr [GenValue] beta
+    -> (PanePath -> Notebook -> Window -> StateM (Maybe beta, Connections))
+buildGenericFormsPane descrs formDescr = \ _panePath _notebook window -> do
+    reifyState (\ stateR -> do
+        let val = map (\ (s,GenFG _ v) -> GenV v) descrs
+        lastSaved           <- liftIO $ newIORef val
+        (widget,inj,ext,notifier) <- reflectState (buildGenericEditor descrs) stateR
         sw <- scrolledWindowNew Nothing Nothing
         scrolledWindowAddWithViewport sw widget
         scrolledWindowSetPolicy sw PolicyAutomatic PolicyAutomatic

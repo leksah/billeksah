@@ -67,9 +67,9 @@ import Data.List (intersperse, foldl')
 import Data.Version (showVersion, Version(..))
 import Base.PluginTypes (VersionBounds, PluginName, Prerequisite)
 import Control.Monad (liftM)
-import Base.MyMissing (trim)
+import Base.MyMissing (myCast, trim)
 import Debug.Trace (trace)
-import Data.Typeable (Typeable, cast)
+import Data.Typeable (Typeable)
 
 -- ------------------------------------------------------------
 -- * Description of fields
@@ -129,7 +129,8 @@ mkFieldS name synopsis printer parser getter setter =
 -- * Read and write
 -- ------------------------------------------------------------
 
-type PrefDescr = Either [(String,GenFieldDescriptionS)] GenFieldDescriptionS
+type PrefDescr = Either [(String,GenFieldDescriptionS)]
+    GenFieldDescriptionS
 
 showFields :: PrefDescr -> String
 showFields (Right (GenFS dateDesc date))  = PP.render $
@@ -220,13 +221,12 @@ applyFieldParsers prefs parseF = do
 
 readFieldsSimple :: Typeable alpha => FilePath -> [FieldDescriptionS alpha] -> alpha -> IO alpha
 readFieldsSimple fn descriptions defaultValue = catch (do
+    putStrLn ("readFieldsSimple " ++ fn)
     res <- parseFromFile (parseFields' (Right $ GenFS descriptions defaultValue)) fn
     case res of
                 Left pe -> error $ "Error reading file " ++ show pe
-                Right (Right (GenFS _ r)) -> case cast r of
-                                                Just value -> value
-                                                Nothing    -> error
-                                                 "ConfigFile>>readFieldsSimple: cast failed"
+                Right (Right (GenFS _ r)) ->
+                    return $ myCast "ConfigFile>>readFieldsSimple:" r
                 Right (Left _) -> error "ConfigFile>>readFieldsSimple: impossible")
     (\ e -> error $ "Error reading file " ++ show e)
 
@@ -234,9 +234,7 @@ parseFieldsSimple :: Typeable alpha => String -> [FieldDescriptionS alpha] -> al
 parseFieldsSimple str descriptions defaultValue  =
     let res = parseFields str (Right $ GenFS descriptions defaultValue)
     in case res of
-        (Right (GenFS _ r)) -> case cast r of
-                                Just value -> value
-                                Nothing -> error "ConfigFile>>parseFieldsSimple: cast failed"
+        (Right (GenFS _ r)) -> myCast "ConfigFile>>parseFieldsSimple:" r
         otherwise -> error "ConfigFile>>parseFieldsSimple: impossible"
 
 showFieldsSimple :: Typeable alpha =>  alpha -> [FieldDescriptionS alpha] -> String

@@ -22,11 +22,14 @@ module Base.MyMissing (
 ,   nonEmptyLines
 ,   trim
 ,   insertAt
+,   myCast
 ) where
 
 import Data.List (find,unfoldr)
 import Data.Maybe (isJust)
 import Data.Char (isSpace)
+import Data.Typeable (Typeable(..), Typeable)
+import Unsafe.Coerce (unsafeCoerce)
 
 
 -- | remove leading and trailing spaces
@@ -91,3 +94,13 @@ insertAt i e l | i < 0        = e : l
                | otherwise    = let (start,end) = splitAt i l
                                 in start ++ (e : end)
 
+-- | The type-safe cast operation
+myCast :: (Typeable a, Typeable b) => String -> a -> b
+myCast errorString x = r
+  where
+    xt = typeOf x
+    rt = typeOf r
+    r  = if xt == rt
+           then unsafeCoerce x
+           else error $ errorString ++ ". Cast error inputType: " ++ show xt
+                            ++ " outputType: " ++ show rt

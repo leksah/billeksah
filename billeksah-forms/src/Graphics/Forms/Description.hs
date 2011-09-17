@@ -22,6 +22,10 @@ import Graphics.Forms.Basics
 import Graphics.Forms.Parameters
 import Graphics.Forms.Build
 import Graphics.Forms.GUIEvent
+import Graphics.Panes
+import Graphics.Frame
+import Graphics.FrameTypes
+import Graphics.Session
 import Base
 
 import Graphics.UI.Gtk
@@ -32,6 +36,13 @@ import Data.Version (Version(..))
 import Data.Typeable (Typeable)
 import qualified Data.Map as Map (empty)
 import Base.Preferences (validatePrefs)
+import Graphics.Panes (Direction(..))
+import Graphics.Forms.Composite
+       (pairEditor, ColumnDescr(..), multisetEditor)
+import Graphics.Forms.Simple (genericEditor, stringEditor)
+import Data.List (sortBy)
+import Graphics.Panes.Preferences
+       (PreferencesPane(..), openPreferencesPane)
 
 -- ----------------------------------------------
 -- * It's a plugin
@@ -47,34 +58,98 @@ formsPluginInterface = do
          piName    = pluginNameForms,
          piVersion = Version [1,0,0][]}
 
-
 -- -----------------------------------------------
 -- * Initialization
 --
 
-
 formsInit1 :: BaseEvent -> PEvent FormsEvent -> StateM ()
-formsInit1 baseEvent myEvent = do
+formsInit1 _baseEvent _myEvent = do
     message Debug ("init1 " ++ pluginNameForms)
     initialRegister
     return ()
 
-framePrefs = []
+panesPrefs :: FieldDescription PanePrefs
+panesPrefs =
+    VertBox defaultParams
+        [mkField
+            (("Name",ParaString "Categories for panes") <<<
+             ("Shadow",ParaShadow ShadowIn) <<<
+             ("Direction",ParaDir Vertical) <<<
+             ("MinSize",ParaSize (-1,130)) <<<
+             defaultParams)
+            (PP.text . show)
+            readParser
+            (\ a -> ppCategoryForPane a)
+            (\ b a -> a{ppCategoryForPane = b})
+            (multisetEditor
+                (ColumnDescr True [("Pane Id",\(n,_) -> [cellText := n], Nothing)
+                                   ,("Pane Category",\(_,v) -> [cellText := v],
+                                        Nothing)])
+                ((pairEditor
+                    (stringEditor (\s -> not (null s)) True,defaultParams)
+                    (stringEditor (\s -> not (null s)) True,defaultParams)),defaultParams)
+                (Just (sortBy (\(a,_) (a2,_) -> compare a a2)))
+                (Just (\(a,_) (a2,_) -> a == a2)))
+            (\i -> return ())
+    ,   mkField
+            (("Name", ParaString "Pane path for category") <<<
+            ("Shadow", ParaShadow ShadowIn) <<<
+            ("Direction", ParaDir Vertical) <<<
+            ("MinSize", ParaSize (-1,130)) <<<
+                defaultParams)
+            (PP.text . show)
+            readParser
+            ppPathForCategory
+            (\b a -> a{ppPathForCategory = b})
+            (multisetEditor
+                (ColumnDescr True [("Pane category",\(n,_) -> [cellText := n],
+                                    Nothing)
+                                   ,("Pane path",\(_,v) -> [cellText := show v],
+                                     Nothing)])
+                ((pairEditor
+                    (stringEditor (\s -> not (null s)) True,defaultParams)
+                    (genericEditor,defaultParams)),defaultParams)
+                (Just (sortBy (\(a,_) (a2,_) -> compare a a2)))
+                (Just (\(a,_) (a2,_) -> a == a2)))
+            (\i -> return ())
+    ,   mkField
+            (("Name", ParaString "Default pane path") <<< defaultParams)
+            (PP.text . show)
+            readParser
+            ppDefaultPath
+            (\b a -> a{ppDefaultPath = b})
+            genericEditor
+            (\i -> return ())]
 
 formsInit2 :: BaseEvent -> PEvent FormsEvent -> StateM ()
 formsInit2 baseEvent myEvent = do
     message Debug ("init2 " ++ pluginNameForms)
-    RegisterPrefs allPrefs <- triggerFormsEvent (RegisterPrefs framePrefs)
+    RegisterPrefs allPrefs <- triggerFormsEvent
+        (RegisterPrefs [("Frame",GenF panesPrefs defaultPanePrefs)])
     case validatePrefs allPrefs of
         Nothing -> return ()
         Just str -> error $ "Description>>formsInit2::"++ str
     setState PrefsDescrState allPrefs
-    return ()
+    registerFrameEvent handler >> return ()
+  where handler (RegisterActions actions) = return $ RegisterActions $ actions ++ myActions
+        handler (RegisterPane paneTypes)  = return $ RegisterPane $ paneTypes ++ myPaneTypes
+        handler e                         = return e
+
+myActions :: [ActionDescr]
+myActions =
+    [AD "Configuration" "_Configuration" Nothing Nothing (return ()) Nothing ActionSubmenu
+            (Just $ MPAfter ["View"] False) Nothing [],
+     AD "EditPrefs" "EditPrefs" Nothing Nothing openPreferencesPane Nothing ActionNormal
+        (Just $ MPLast ["Configuration"] False) Nothing []]
+
+myPaneTypes :: [(String,GenPane)]
+myPaneTypes =
+    [asRegisterType (undefined :: PreferencesPane)]
 
 initialRegister = do
     registerState GuiHandlerStateSel (Handlers Map.empty)
     registerState GtkEventsStateSel (GtkRegMap Map.empty)
-    registerState PrefsDescrState framePrefs
+    registerState PrefsDescrState []
 
 type MkFieldDescription alpha beta =
     Parameters      ->

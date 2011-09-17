@@ -21,7 +21,7 @@ module Graphics.Forms.GUIEvent (
     getStandardRegFunction
 ,   GtkRegFunc
 ,   GtkHandler
-,   Connection(..)
+,   Connection
 ,   Connections
 ,   GtkRegMap(..)
 ,   GuiHandlerStateSel(..)
@@ -40,23 +40,17 @@ module Graphics.Forms.GUIEvent (
 import Base
 import Graphics.Pane
 import Graphics.Forms.Basics
-       (GUIEventSelector(..), GUIEvent(..), GEvent,
-        pluginNameForms)
+       (GUIEventSelector(..), GUIEvent(..), GEvent)
 
 
 
 import Graphics.UI.Gtk
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk
 import Data.Unique
-import Data.IORef
 import Control.Monad
-import Data.Map (Map(..))
-import qualified Data.Map as Map  (delete,insert,lookup,empty)
-import Data.Maybe (isJust,fromJust)
-import Control.Arrow (first)
+import Data.Map (Map)
+import qualified Data.Map as Map  (insert,lookup,empty)
 import Data.Typeable (Typeable)
-import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Reader.Class (MonadReader(..))
 
 
 -- ------------------------------------------------------------
@@ -106,11 +100,11 @@ data GtkEventsStateSel = GtkEventsStateSel
 instance Selector GtkEventsStateSel where
     type ValueType GtkEventsStateSel = GtkRegMap
 
-getGtkHandlers :: StateM GtkRegMap
-getGtkHandlers = getState GtkEventsStateSel
-
-setGtkHandlers :: GtkRegMap -> StateM ()
-setGtkHandlers = setState GtkEventsStateSel
+--getGtkHandlers :: StateM GtkRegMap
+--getGtkHandlers = getState GtkEventsStateSel
+--
+--setGtkHandlers :: GtkRegMap -> StateM ()
+--setGtkHandlers = setState GtkEventsStateSel
 
 withGtkHandlers :: (GtkRegMap -> GtkRegMap) -> StateM ()
 withGtkHandlers = withState GtkEventsStateSel
@@ -124,7 +118,7 @@ makeGUIEvent = do
     ev <- mkEvent (undefined :: GUIEventSelector) ef
     withState GuiHandlerStateSel (\ (Handlers handlerMap :: Handlers GUIEvent) ->
         case Map.lookup (evtID ev) handlerMap of
-                Just [] -> error "Events>>makeGUIEvent: Event already known"
+                Just _ -> error "Events>>makeGUIEvent: Event already known"
                 Nothing -> Handlers (Map.insert (evtID ev) [] handlerMap))
     withGtkHandlers (addEventToGtkHandlers ev)
     return ev
@@ -132,7 +126,7 @@ makeGUIEvent = do
     addEventToGtkHandlers ev (GtkRegMap map) =
         case (evtID ev) `Map.lookup` map of
             Nothing -> GtkRegMap $ Map.insert (evtID ev) (Map.empty) map
-            Just x -> error "Events>>makeEvent: Unique not unique"
+            Just _ -> error "Events>>makeEvent: Unique not unique"
 
 --
 -- | Registers an event handler for this event
@@ -193,7 +187,7 @@ activateGUIEvent' widget event registerFunc eventSel = do
                     eventList <- mapM (\f -> let ev = GUIEvent
                                                     {geSelector    = eventSel,
                                                      geGtkEvent    = e,
-                                                     geText        = "",
+                                                     geText        = name,
                                                      geMbSelection = Nothing,
                                                      geGtkReturn   = False}
                                             in reflectState (f ev) stateR)

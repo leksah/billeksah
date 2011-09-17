@@ -49,7 +49,6 @@ import Data.Map (Map)
 import Base.Graph (topSortGraph)
 import Base.State (StateM)
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Typeable (cast)
 
 -- | Plugin file (.lksp)
 

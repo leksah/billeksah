@@ -16,6 +16,7 @@
 module Graphics.Panes.Preferences (
 
     openPreferencesPane
+,   PreferencesPane
 
 ) where
 
@@ -36,6 +37,7 @@ import Graphics.UI.Gtk.Windows.MessageDialog
        (ButtonsType(..), MessageType(..))
 import System.Glib.Attributes (AttrOp(..), set)
 import Control.Monad (when)
+import Debug.Trace (trace)
 
 openPreferencesPane ::  StateM ()
 openPreferencesPane = do
@@ -43,11 +45,11 @@ openPreferencesPane = do
     mbPane :: Maybe PreferencesPane <- getOrBuildDisplay (Left []) True
     case mbPane of
         Nothing -> return ()
-        Just p -> registerRefresh p >> return ()
+        Just p ->  {-- registerRefresh p  >> --} return ()
                     -- Handle changes to preferences, while the pane is open.
     return ()
 
-registerRefresh pane = undefined
+--registerRefresh pane = undefined
 --getPluginPaneEvent >>= (\e -> registerEvent' e handler)
 --  where
 --    handler PluginDescrChanged =  do
@@ -69,8 +71,8 @@ registerRefresh pane = undefined
 
 data PreferencesPane = PreferencesPane {
     prpTopW             :: VBox,
-    prpInj              :: Injector [(String, GenValue)],
-    prpExt              :: Extractor [(String, GenValue)]
+    prpInj              :: Injector [GenValue],
+    prpExt              :: Extractor [GenValue]
 } deriving Typeable
 
 
@@ -97,25 +99,23 @@ instance Pane PreferencesPane
 --
 buildPreferencesPane :: PanePath -> Notebook -> Window
                             -> StateM (Maybe PreferencesPane, Connections)
-buildPreferencesPane = \ pp nb window -> do
-    undefined
---    allPrefs <- getState PrefsDescrState
---    let allPrefs' = map (\ (s,(GenF fd v)) ->
---                            (s,GenFG (toFieldDescriptionG fd) v)) allPrefs
---    let vals = map (\ (s,(GenFG _ v)) -> GenV v)  allPrefs'
---    let descrs = map (\ (s,(GenFG d _)) -> (s, d)) allPrefs'
---    (buildFormsPane (TabbedBoxG descrs) vals formPaneDescr) pp nb window
---  where
---    formPaneDescr :: FormPaneDescr [GenValue] PreferencesPane =
---        FormPaneDescr {
---            fpGetPane      = \ top inj ext -> PreferencesPane top inj ext,
---            fpSaveAction   = \ v -> do
---                currentConfigPath <- getCurrentConfigPath
-----                liftIO $ writePluginConfig currentConfigPath v
-----                triggerPluginPane PluginConfigChanged
---                return (),
---            fpHasChanged   = \ v1 v2 -> v1 == v2,
---            fpGuiHandlers  = handlers,
---            fpExtraButtons = []}
---    handlers = []
+buildPreferencesPane = \ pp nb window -> trace "1" $ do
+
+    allPrefs <-  getState PrefsDescrState
+    let descrs = map (\ (s,GenF fdg v) -> (s,GenFG (toFieldDescriptionG fdg) v))
+                     allPrefs
+    trace "5" $ (buildGenericFormsPane descrs formPaneDescr) pp nb window
+  where
+    formPaneDescr :: FormPaneDescr [GenValue] PreferencesPane =
+        FormPaneDescr {
+            fpGetPane      = \ top inj ext -> PreferencesPane top inj ext,
+            fpSaveAction   = \ v -> do
+                currentConfigPath <- getCurrentConfigPath
+--                liftIO $ writePluginConfig currentConfigPath v
+--                triggerPluginPane PluginConfigChanged
+                return (),
+            fpHasChanged   = \ v1 v2 -> v1 == v2,
+            fpGuiHandlers  = handlers,
+            fpExtraButtons = []}
+    handlers = []
 

@@ -1592,7 +1592,7 @@ getActivePanePath = do
         Nothing -> return Nothing
         Just (paneName,_) -> do
             (pp,_)  <- guiPropertiesFromName paneName
-            return (Just (pp))
+            return (Just pp)
 
 getActivePanePathOrStandard :: StandardPath -> StateM  (PanePath)
 getActivePanePathOrStandard sp = do

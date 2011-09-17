@@ -31,8 +31,6 @@ import Graphics.Panes (Direction(..))
 
 import Graphics.UI.Gtk (Packing, ShadowType)
 import Graphics.UI.Gtk.General.Enums (Packing(..), ShadowType(..))
-import Data.Maybe
-import qualified Data.List as List
 import Data.Typeable (Typeable)
 
 -- ParaName "Hallo" <<< defaultParams
@@ -50,6 +48,7 @@ type Parameters = [Para ParaType]
 data Para alpha = Para
     {paName   :: String,
      paValue  :: alpha}
+     deriving Show
 
 infixr 9 <<<
 
@@ -68,7 +67,7 @@ getPara name paras =
 getParaS :: String -> Parameters -> String
 getParaS name paras = case getPara name paras of
                     ParaString s -> s
-                    otherwise -> error "Parameters>>Not a string"
+                    _ -> error "Parameters>>Not a string"
 
 data StringSel = Name | StockId | Synopsis
     deriving (Eq, Ord, Show, Typeable)

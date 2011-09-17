@@ -41,6 +41,9 @@ module Graphics.Panes (
 ,   Connections
 ,   PaneInterface(..)
 
+,   PanePrefs(..)
+,   defaultPanePrefs
+
 -- * Other
 ,   signalDisconnectAll
 
@@ -126,7 +129,13 @@ initialLayout = TerminalP {
 ,   detachedSize = Nothing}
 
 
+data PanePrefs = PanePrefs {
+    ppCategoryForPane :: [(String,String)],
+    ppPathForCategory :: [(String,PanePath)],
+    ppDefaultPath :: PanePath}
+    deriving (Eq,Typeable)
 
+defaultPanePrefs =  PanePrefs [] [] [SplitP LeftP]
 
 --
 -- | The class which describes the minimal implementation

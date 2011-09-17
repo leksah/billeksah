@@ -36,6 +36,9 @@ module Graphics.Forms.Basics (
 ,   FieldDescription(..)
 ,   GenFieldDescription(..)
 ,   GenValue(..)
+,   castFD
+,   toGenFieldDescr
+,   toFieldEditor
 
 ,   SectionName
 ,   PrefsDescrState(..)
@@ -53,18 +56,14 @@ import Graphics.Forms.Parameters
 
 import Graphics.UI.Gtk
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk
-import Data.Unique
-import Data.IORef
 import Control.Monad
-import Data.Map (Map(..))
-import qualified Data.Map as Map  (delete,insert,lookup,empty)
-import Data.Maybe (isJust,fromJust)
-import Control.Arrow (first)
-import Base.MyMissing (allOf)
-import Data.Typeable (Typeable)
+import Data.Typeable (Typeable(..), Typeable1, cast, Typeable)
 import qualified Text.PrettyPrint as PP (Doc)
 import qualified Text.ParserCombinators.Parsec as P (CharParser)
+import Debug.Trace (trace)
+import Data.Maybe (fromJust)
 
+pluginNameForms :: [Char]
 pluginNameForms = "billeksah-forms"
 
 
@@ -133,8 +132,8 @@ instance EventSelector GUIEventSelector where
 
 data GenSelection = forall alpha . Typeable alpha => GenSelection alpha
 
+allGUIEvents, genericGUIEvents :: [GUIEventSelector]
 genericGUIEvents = [FocusOut,FocusIn,ButtonPressed,KeyPressed]
-allGUIEvents :: [GUIEventSelector]
 allGUIEvents = allOf
 
 -- * A description for fields, that can be edited with a GUI
@@ -148,9 +147,69 @@ data FieldDescription alpha =  Field {
     | VertBox Parameters [FieldDescription alpha] -- ^ Vertical Box
     | HoriBox Parameters [FieldDescription alpha] -- ^ Horizontal Box
     | TabbedBox [(String,FieldDescription alpha)]   -- ^ Notebook
+    deriving (Typeable)
 
-data GenFieldDescription = forall alpha . Typeable alpha => GenF (FieldDescription alpha) alpha
-data GenValue = forall alpha . Typeable alpha => GenV alpha
+-- | A type neutral FieldDescription with a type neutral value attached
+data GenFieldDescription = forall alpha . (Typeable alpha, Eq alpha) => GenF (FieldDescription alpha) alpha
+
+-- | A type neutral value of a field description
+data GenValue = forall alpha . (Typeable alpha, Eq alpha) => GenV alpha
+    deriving Typeable
+
+instance Eq GenValue where
+    (GenV a) == (GenV b) = if typeOf a == typeOf b then
+                    fromJust (cast a) == b
+                    else False
+
+toGenFieldDescr :: (Typeable alpha, Eq alpha) => FieldDescription alpha ->
+    FieldDescription GenValue
+toGenFieldDescr (VertBox paras fdl) = VertBox paras (map toGenFieldDescr fdl)
+toGenFieldDescr (HoriBox paras fdl) = HoriBox paras (map toGenFieldDescr fdl)
+toGenFieldDescr (TabbedBox list)    = TabbedBox
+        (map (\(s,fd) -> (s,toGenFieldDescr fd)) list)
+toGenFieldDescr (Field paras fdFieldPrinter fdFieldParser fdFieldEditor fdApplicator)
+        = trace (show paras) $ Field
+            paras
+            (\ (GenV a) ->
+                let a' = myCast "Basics>>toGenFieldDescr:1 " a
+                in fdFieldPrinter a')
+            (\ (GenV a) ->
+                let a' =  myCast "Basics>>toGenFieldDescr:2 " a
+                in liftM GenV (fdFieldParser a'))
+            (\ (GenV a) ->
+                let a' = myCast "Basics>>toGenFieldDescr:3 " a
+                in liftM toFieldEditor (fdFieldEditor a'))
+            (\ (GenV a) (GenV b) ->
+                let (a', b') = (myCast "Basics>>toGenFieldDescr:4 " a,
+                                myCast "Basics>>toGenFieldDescr:5 " b)
+                in fdApplicator a' b')
+
+-- | A cast from a type neutral FieldDescription with a type neutral value
+-- to a typed field description with a typed value
+castFD :: (Typeable alpha, Typeable1 FieldDescription, Typeable GenValue) =>
+    FieldDescription GenValue -> FieldDescription alpha
+castFD fdGen = myCast "Basics>>castFD" fdGen
+
+
+toFieldEditor :: (Typeable alpha, Eq alpha) => (Widget,
+                     Injector alpha,
+                     alpha -> Extractor alpha,
+                     GEvent)
+                -> (Widget,
+                     Injector GenValue,
+                     GenValue -> Extractor GenValue,
+                     GEvent)
+toFieldEditor (widget, inj, ext, gevent) =
+    (widget,
+        (\ (GenV a) -> let a' = myCast "Basics>>toFieldEditor:1" a
+                       in inj a'),
+        (\ (GenV a) -> let a' = myCast "Basics>>toFieldEditor:2" a
+                       in liftM genMaybe (ext a')),
+        gevent)
+  where
+    genMaybe :: (Typeable alpha, Eq alpha) => Maybe alpha -> Maybe GenValue
+    genMaybe Nothing  = Nothing
+    genMaybe (Just a) = Just (GenV a)
 
 -- -----------------------------------------------
 -- * Events the gui frame triggers

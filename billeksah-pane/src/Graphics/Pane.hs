@@ -80,7 +80,7 @@ frameInit2 baseEvent myEvent = do
                                     setStatusText "SBActivePane" pn
             DeactivatePane _ -> do  setSensitivity [(PaneActiveSens, False)]
                                     setStatusText "SBActivePane" ""
-            _                -> return ())
+            _ -> return ())
     return ()
 
 data PaneActiveSens = PaneActiveSens
