@@ -48,6 +48,10 @@ module Graphics.Forms.Basics (
 ,   triggerFormsEvent
 ,   getFormsEvent
 
+,   setCurrentPrefsPath
+,   getCurrentPrefsPath
+,   registerCurrentPrefsPath
+
 ) where
 
 
@@ -245,11 +249,30 @@ getFormsEvent = getEvent FormsEventSel
 -- * Defining the state
 --
 
+
 type SectionName = String
 
+-- | The description and current value of preferences
 data PrefsDescrState = PrefsDescrState
     deriving (Eq, Ord, Show, Typeable)
 
+-- | The description and current value of preferences
 instance Selector PrefsDescrState where
-    type ValueType PrefsDescrState = [(String,GenFieldDescription)]
+    type ValueType PrefsDescrState = [(SectionName,GenFieldDescription)]
 
+-- | The file path for preferences
+data PrefsPathSel = PrefsPathSel
+    deriving (Eq,Ord,Show,Typeable)
+
+-- | The file path for preferences
+instance Selector PrefsPathSel where
+    type ValueType PrefsPathSel = FilePath
+
+setCurrentPrefsPath :: FilePath -> StateM ()
+setCurrentPrefsPath =  setState PrefsPathSel
+
+getCurrentPrefsPath :: StateM FilePath
+getCurrentPrefsPath = getState PrefsPathSel
+
+registerCurrentPrefsPath :: FilePath -> StateM (Maybe String)
+registerCurrentPrefsPath = registerState PrefsPathSel

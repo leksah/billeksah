@@ -67,9 +67,11 @@ import Data.List (intersperse, foldl')
 import Data.Version (showVersion, Version(..))
 import Base.PluginTypes (VersionBounds, PluginName, Prerequisite)
 import Control.Monad (liftM)
-import Base.MyMissing (myCast, trim)
-import Debug.Trace (trace)
+import Base.MyMissing (maybeRead, myCast, trim)
 import Data.Typeable (Typeable)
+
+--import Debug.Trace
+trace a b = b
 
 -- ------------------------------------------------------------
 -- * Description of fields
@@ -118,8 +120,8 @@ mkFieldS name synopsis printer parser getter setter =
                 PP.$$ (PP.nest 5 (case synopsis of
                                     Nothing -> PP.empty
                                     Just str -> PP.text $"--" ++ str)))
-        (\ dat -> try (do
-            symbol name
+        (\ dat -> (do
+            try (symbol name)
             colon
             value <- parser
             return (setter value dat)))
@@ -163,22 +165,27 @@ parseFields' (Right (GenFS fds defaultValue)) =
         return (Right (GenFS fds res))
         <?> "parseFields' parser1"
 parseFields' (Left descrList) = do
-    newDescrList <- many (parseCategory descrList)
-    return (Left (catMaybes newDescrList))
+    newDescrList <- parseCategory [] descrList
+    return (Left newDescrList)
         <?> "parseFields' parser2"
 
-parseCategory :: [(String,GenFieldDescriptionS)]
-    -> CharParser () (Maybe (String,GenFieldDescriptionS))
-parseCategory descrList = do
-    name <- parseCatName
-    case [genFs | (n,genFs) <- descrList, n == name] of
-        [(GenFS fieldList defaultValue)] -> do
-            res <-  applyFieldParsers defaultValue (map fieldParser fieldList)
-            return (Just (name,GenFS fieldList res))
-        otherwise -> do
-            -- skipToNextCategory
-            return Nothing -- no error message, unknown categories are just skipped
-        <?> "parseCategory"
+parseCategory :: [(String,GenFieldDescriptionS)] -> [(String,GenFieldDescriptionS)]
+    -> CharParser () [(String,GenFieldDescriptionS)]
+parseCategory accu descrList = trace "parseCategory1" (
+    do
+        eof
+        return accu
+    <|> do
+        name <- parseCatName
+        trace ("parseCategory2 " ++ name) (
+            case [genFs | (n,genFs) <- descrList, n == name] of
+                [(GenFS fieldList defaultValue)] -> do
+                    res <-  applyFieldParsers defaultValue (map fieldParser fieldList)
+                    parseCategory ((name,GenFS fieldList res) : accu) descrList
+                otherwise -> do
+                    skipToNextCategory
+                    parseCategory accu descrList) -- no error message, unknown categories are just skipped
+    <?> "parseCategory")
 
 parseCatName ::  CharParser () String
 parseCatName = do
@@ -194,7 +201,7 @@ skipToNextCategory = do
     <|> do
         many (noneOf "\n")
         do
-            symbol "\n"
+            optional (char '\n')
             c <- lookAhead anyChar
             if c == '['
                 then return ()
@@ -202,18 +209,18 @@ skipToNextCategory = do
     <?> "skipToNextCategory"
 
 applyFieldParsers ::  a ->  [a ->  CharParser () a] ->  CharParser () a
-applyFieldParsers prefs parseF = do
+applyFieldParsers prefs parseF = trace "afp1" (do
         eof
-        return (prefs)
-    <|> do
-        char '['
-        return (prefs)
-    <|> do
-        let parsers = map (\a ->  a prefs) parseF
+        return (prefs))
+    <|> trace "afp2" (do
+        lookAhead (char '[')
+        return (prefs))
+    <|> trace "afp3" (do
+        let parsers = map (\a -> trace "xx" (a prefs)) parseF
         newprefs <-  choice parsers
         whiteSpace
-        applyFieldParsers newprefs parseF
-    <?> "applyFieldParsers"
+        applyFieldParsers newprefs parseF)
+    <?> trace "afp4" "applyFieldParsers"
 
 -- ------------------------------------------------------------
 -- * Convenience methods with simpler interfaces for files without category
@@ -244,66 +251,72 @@ showFieldsSimple date dateDesc = showFields (Right $ GenFS dateDesc date)
 -- * Parsers and printers
 -- ------------------------------------------------------------
 
+-- A String parser parses some string, which may span multiple lines
+-- Carriage returns are not significant
 stringParser :: CharParser () String
-stringParser = do
+stringParser = trace "str1" (do
     firstLine <- many (noneOf ['\n'])
-    lines <- many $ try $ do {char '\n'; parseValueLine}
-    return (trim (unwords (firstLine : lines)))
+    optional (char '\n')
+    lines <- many $ parseStringLine
+    let res = trim (unwords (firstLine : lines))
+    trace ("stringParser \"" ++ res ++ "\"") $ return res)
+    <?> "stringParser"
 
-parseValueLine :: CharParser () String
-parseValueLine =  do
-        many1 (oneOf " \t") --first skip blanks
-        char '-'
-        char '-'
-        many (noneOf ['\n'])
-        return [] --skip comment
-    <|> do
-        many1 (oneOf " \t") --first skip blanks
-        line <- many (noneOf ['\n'])
-        return line
-    <?> "parseValueLine"
+parseStringLine :: CharParser () String
+parseStringLine =  trace "parseValueLine" (do
+    many1 (oneOf " \t") -- fails for lines which starts with a non blank
+    (do
+            char '-' -- skip comments
+            char '-'
+            many (noneOf ['\n'])
+            optional (char '\n')
+            return []) --skip comment
+        <|> (do
+                line <- many (noneOf ['\n'])
+                optional (char '\n')
+                return line)
+    <?> trace "vl3" "parseValueLine")
 
 boolParser ::  CharParser () Bool
-boolParser = do
+boolParser = trace "bp1" (do
     (symbol "True" <|> symbol "true")
-    return True
-    <|> do
+    return True)
+    <|> trace "bp2" (do
     (symbol "False"<|> symbol "false")
-    return False
+    return False)
     <?> "bool parser"
 
 readParser ::  Read a =>  CharParser () a
-readParser = do
+readParser = trace "rp1" (do
     str <- stringParser
     trace ("readParser on:" ++ str) $ if null str
         then unexpected "read parser on empty string"
         else do
             case maybeRead str of
                 Nothing -> unexpected $ "read parser no parse " ++ str
-                Just r -> return r
+                Just r -> return r)
     <?> "read parser"
-        where maybeRead = listToMaybe . map fst . filter (null . snd) . reads
 
 pairParser ::  CharParser () alpha ->  CharParser () (alpha,alpha)
-pairParser p2 = do
+pairParser p2 = trace "pp1" (do
     parens $ do
         v1 <-  p2
         comma
         v2 <-  p2
-        return (v1,v2)
+        return (v1,v2))
     <?> "pair parser"
 
 versionParser :: CharParser () Version
-versionParser = do
+versionParser = trace "vp1" (do
     branch <-  sepBy1 intParser dot
-    return Version{versionBranch=branch, versionTags=[]}
+    return Version{versionBranch=branch, versionTags=[]})
     <?> "version parser"
 
 
 intParser ::  CharParser () Int
-intParser = do
+intParser = trace "ip1" (do
     i <-  integer
-    return (fromIntegral i)
+    return (fromIntegral i))
     <?> "int parser"
 
 emptyParser ::  CharParser () ()
@@ -377,21 +390,23 @@ parsePluginList :: CharParser () [Prerequisite]
 parsePluginList = brackets (sepBy pluginParser comma)
 
 pluginParser :: CharParser () (PluginName, VersionBounds)
-pluginParser =
+pluginParser = trace "pp1" (
     parens $ do
         pluginName <- liftM trim (many (noneOf ","))
         comma
         lowerBound <- boundParser
         comma
         upperBound <- boundParser
-        return (pluginName,(lowerBound,upperBound))
+        return (pluginName,(lowerBound,upperBound)))
+    <?> "pluginParser"
 
 boundParser :: CharParser () (Maybe Version)
 boundParser =
-    try $ do
+    trace "bp1" (try $ do
             v <- versionParser
-            return (Just v)
-    <|> do
+            return (Just v))
+    <|> trace "bp2" (do
             symbol "any"
-            return Nothing
+            return Nothing)
+    <?> "boundParser"
 

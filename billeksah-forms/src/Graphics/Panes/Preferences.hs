@@ -16,7 +16,8 @@
 module Graphics.Panes.Preferences (
 
     openPreferencesPane
-,   PreferencesPane
+,   PreferencesPane(..)
+
 
 ) where
 
@@ -25,45 +26,16 @@ import Graphics.Pane
 import Graphics.Forms.Basics
 import Graphics.Forms.Build
 import Graphics.Forms.FormPane
-import Graphics.Forms.GUIEvent
 
 import Graphics.UI.Gtk
 import Data.Typeable (Typeable)
-import Control.Monad.IO.Class (MonadIO(..))
-import Data.IORef (readIORef, writeIORef, newIORef)
-import Graphics.UI.Gtk.General.Enums
-       (WindowPosition(..), Packing(..), PolicyType(..))
-import Graphics.UI.Gtk.Windows.MessageDialog
-       (ButtonsType(..), MessageType(..))
-import System.Glib.Attributes (AttrOp(..), set)
-import Control.Monad (when)
-import Debug.Trace (trace)
+import Base.Preferences (savePrefs, setPrefs)
 
 openPreferencesPane ::  StateM ()
 openPreferencesPane = do
     message Debug "Open preferences pane"
-    mbPane :: Maybe PreferencesPane <- getOrBuildDisplay (Left []) True
-    case mbPane of
-        Nothing -> return ()
-        Just p ->  {-- registerRefresh p  >> --} return ()
-                    -- Handle changes to preferences, while the pane is open.
+    _mbPane :: Maybe PreferencesPane <- getOrBuildDisplay (Left []) True
     return ()
-
---registerRefresh pane = undefined
---getPluginPaneEvent >>= (\e -> registerEvent' e handler)
---  where
---    handler PluginDescrChanged =  do
---        mbV <-  pcpExt pane
---        case mbV of
---            Nothing -> return ()
---            Just v -> do
---                currentConfigPath   <- getCurrentConfigPath
---                prerequisites       <- liftIO $ getPrereqChoices
---                                            currentConfigPath
---                let pluginConfig'   =  v{cfChoices = prerequisites
---                                                     ++ cfPlugins v}
---                (pcpInj pane) pluginConfig'
---    handler otherwise          =  return ()
 
 -- ----------------------------------------------
 -- * It's a pane
@@ -81,10 +53,10 @@ instance PaneInterface PreferencesPane where
             deriving(Read,Show)
 
     getTopWidget    =  \ p   -> castToWidget (prpTopW p)
-    primPaneName    =  \ dp  -> "PreferencesPane"
+    primPaneName    =  \ _dp  -> "PreferencesPane"
     paneType        =  \ _   -> "**PreferencesPane"
-    saveState       =  \ s   -> return $ Just PrefPaneState
-    recoverState    =  \ pp ps -> do
+    saveState       =  \ _s   -> return $ Just PrefPaneState
+    recoverState    =  \ pp _ps -> do
         nb      <-  getNotebook pp
         mbP     <-  buildPane pp nb builder
         return mbP
@@ -99,23 +71,21 @@ instance Pane PreferencesPane
 --
 buildPreferencesPane :: PanePath -> Notebook -> Window
                             -> StateM (Maybe PreferencesPane, Connections)
-buildPreferencesPane = \ pp nb window -> trace "1" $ do
+buildPreferencesPane = \ pp nb window -> do
 
     allPrefs <-  getState PrefsDescrState
     let descrs = map (\ (s,GenF fdg v) -> (s,GenFG (toFieldDescriptionG fdg) v))
                      allPrefs
-    trace "5" $ (buildGenericFormsPane descrs formPaneDescr) pp nb window
+    buildGenericFormsPane descrs (formPaneDescr (map fst descrs)) pp nb window
   where
-    formPaneDescr :: FormPaneDescr [GenValue] PreferencesPane =
+    formPaneDescr categories =
         FormPaneDescr {
             fpGetPane      = \ top inj ext -> PreferencesPane top inj ext,
             fpSaveAction   = \ v -> do
-                currentConfigPath <- getCurrentConfigPath
---                liftIO $ writePluginConfig currentConfigPath v
---                triggerPluginPane PluginConfigChanged
-                return (),
+                mapM (\ (str,GenV val) -> setPrefs str val) (zip categories v)
+                currentPrefsPath <- getCurrentPrefsPath
+                savePrefs currentPrefsPath,
             fpHasChanged   = \ v1 v2 -> v1 == v2,
-            fpGuiHandlers  = handlers,
+            fpGuiHandlers  = [],
             fpExtraButtons = []}
-    handlers = []
 

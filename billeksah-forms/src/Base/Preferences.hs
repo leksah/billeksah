@@ -27,13 +27,26 @@ import Base
 import Graphics.Forms.Parameters
 import Graphics.Forms.Basics
 
-import Data.List ((\\), nub)
+import Data.List (sortBy, (\\), nub)
 import Data.Typeable (Typeable(..), Typeable)
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad (when)
+import Graphics.Panes
+       (Direction(..), PaneDirection(..), PanePathElement(..))
+import Graphics.UI.Gtk.General.Enums (ShadowType(..))
+import qualified Text.PrettyPrint as PP (text)
+import Graphics.Forms.Composite
+       (pairEditor, ColumnDescr(..), multisetEditor)
+import Graphics.UI.Gtk (cellText)
+import System.Glib.Attributes (AttrOp(..))
+import Graphics.Forms.Simple (genericEditor, stringEditor)
+import Debug.Trace (trace)
 
 -------------------------------------
 -- * The functions to handle preferences
 --
+
+
 
 --
 -- | Checks uniqness of categories
@@ -50,12 +63,12 @@ validatePrefs prefsDescr =
 -- | Load preferences from filepath.
 -- Pref descriptions needs to be registered before
 loadPrefs :: FilePath -> StateM ()
-loadPrefs fp          =  do
+loadPrefs fp          =  trace "loadPrefs" $ do
     allPrefs <- getState PrefsDescrState
     let allPrefsS = map (\(s,GenF descr val) -> (s, GenFS (toFieldDescriptionS descr) val)) allPrefs
     Left loadedPrefs <- liftIO $ readFields fp (Left allPrefsS)
-    let newPrefs = map (exchangeValues loadedPrefs) allPrefs
-    setState PrefsDescrState newPrefs
+    let newPrefs =  map (exchangeValues loadedPrefs) allPrefs
+    trace ("loadedPrefs " ++ show (length loadedPrefs)) $ setState PrefsDescrState newPrefs
     triggerFormsEvent PrefsChanged >> return ()
   where
     exchangeValues :: [(String, GenFieldDescriptionS)] -> (String, GenFieldDescription)
@@ -75,12 +88,8 @@ savePrefs fp          =  do
     let allPrefsS = map (\(s,GenF fda a) -> (s, GenFS (toFieldDescriptionS fda) a)) allPrefs
     let string = showFields (Left allPrefsS)
     liftIO $ writeFile fp string
+    triggerFormsEvent PrefsChanged >> return ()
 
-----
----- | Visaully edit preferences.
-----
---editPrefs             ::  StateM ()
---editPrefs             =  openPreferencesPane
 
 --
 -- | Gets a preference value from a category and a key

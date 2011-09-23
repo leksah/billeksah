@@ -42,7 +42,6 @@ module Graphics.Panes (
 ,   PaneInterface(..)
 
 ,   PanePrefs(..)
-,   defaultPanePrefs
 
 -- * Other
 ,   signalDisconnectAll
@@ -135,7 +134,7 @@ data PanePrefs = PanePrefs {
     ppDefaultPath :: PanePath}
     deriving (Eq,Typeable)
 
-defaultPanePrefs =  PanePrefs [] [] [SplitP LeftP]
+
 
 --
 -- | The class which describes the minimal implementation

@@ -23,10 +23,11 @@ module Base.MyMissing (
 ,   trim
 ,   insertAt
 ,   myCast
+,   maybeRead
 ) where
 
 import Data.List (find,unfoldr)
-import Data.Maybe (isJust)
+import Data.Maybe (listToMaybe, isJust)
 import Data.Char (isSpace)
 import Data.Typeable (Typeable(..), Typeable)
 import Unsafe.Coerce (unsafeCoerce)
@@ -104,3 +105,10 @@ myCast errorString x = r
            then unsafeCoerce x
            else error $ errorString ++ ". Cast error inputType: " ++ show xt
                             ++ " outputType: " ++ show rt
+
+-- | a read which may fail
+
+maybeRead :: Read alpha => String -> Maybe alpha
+maybeRead = listToMaybe . map fst . filter (null . snd) . reads
+
+

@@ -15,7 +15,6 @@ category: Control
 author: Juergen "jutaro" Nicklisch-Franken
 tested-with: GHC ==7.0
 
-
 Library
     exposed-modules:
         Base

@@ -16,6 +16,7 @@
 module Graphics.Forms.Description (
     mkField
 ,   formsPluginInterface
+,   initPrefs
 ) where
 
 import Graphics.Forms.Basics
@@ -33,13 +34,17 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.ParserCombinators.Parsec as P
 import Data.Version (Version(..))
 import qualified Data.Map as Map (empty)
-import Base.Preferences (validatePrefs)
+import Base.Preferences (loadPrefs, validatePrefs)
 import Graphics.Forms.Composite
        (pairEditor, ColumnDescr(..), multisetEditor)
 import Graphics.Forms.Simple (genericEditor, stringEditor)
 import Data.List (sortBy)
 import Graphics.Panes.Preferences
        (PreferencesPane, openPreferencesPane)
+import Control.Monad (liftM, when)
+import System.FilePath ((</>), dropFileName)
+import System.Directory (doesFileExist)
+import Control.Monad.IO.Class (MonadIO(..))
 
 -- ----------------------------------------------
 -- * It's a plugin
@@ -64,6 +69,89 @@ formsInit1 _baseEvent _myEvent = do
     message Debug ("init1 " ++ pluginNameForms)
     initialRegister
     return ()
+
+formsInit2 :: BaseEvent -> PEvent FormsEvent -> StateM ()
+formsInit2 _baseEvent _myEvent = do
+    message Debug ("init2 " ++ pluginNameForms)
+    registerFrameEvent handler >> return ()
+  where handler (RegisterActions actions) = return $ RegisterActions $ actions ++ myActions
+        handler (RegisterPane paneTypes)  = return $ RegisterPane $ paneTypes ++ myPaneTypes
+        handler e                         = return e
+
+myActions :: [ActionDescr]
+myActions =
+    [AD "Configuration" "_Configuration" Nothing Nothing (return ()) Nothing ActionSubmenu
+            (Just $ MPAfter ["View"] False) Nothing [],
+     AD "EditPrefs" "EditPrefs" Nothing Nothing openPreferencesPane Nothing ActionNormal
+        (Just $ MPLast ["Configuration"] False) Nothing []]
+
+myPaneTypes :: [(String,GenPane)]
+myPaneTypes =
+    [asRegisterType (undefined :: PreferencesPane)]
+
+defaultPrefsName :: String
+defaultPrefsName = "Default.prefs"
+
+initialRegister :: StateM (Maybe String)
+initialRegister = do
+    registerState GuiHandlerStateSel (Handlers Map.empty)
+    registerState GtkEventsStateSel (GtkRegMap Map.empty)
+    registerState PrefsDescrState []
+    currentConfigPath <- liftM dropFileName getCurrentConfigPath
+    registerCurrentPrefsPath (currentConfigPath </> defaultPrefsName)
+
+type MkFieldDescription alpha beta =
+    Parameters      ->
+    (Printer beta)     ->
+    (Parser beta)      ->
+    (Getter alpha beta)    ->
+    (Setter alpha beta)    ->
+    (Editor beta)      ->
+    (Applicator beta)  ->
+    FieldDescription alpha
+
+mkField :: Eq beta => MkFieldDescription alpha beta
+mkField parameters printer parser getter setter editor applicator  =
+    let FieldG _ ed = mkFieldG (getParaS "Name" parameters) parameters getter setter editor
+    in Field parameters
+        (\ dat -> (PP.text (getParaS "Name" parameters) PP.<> PP.colon)
+                PP.$$ (PP.nest 15 (printer (getter dat)))
+                PP.$$ (PP.nest 5 (case getPara "Synopsis" parameters of
+                                    ParaString "" -> PP.empty
+                                    ParaString str -> PP.text $"--" ++ str
+                                    _ -> error "Description>>mkField: impossible")))
+        (\ dat -> P.try (do
+            symbol (let ParaString str = getPara "Name" parameters in str)
+            colon
+            val <- parser
+            return (setter val dat)))
+        ed
+        (\ newDat oldDat -> do --applicator
+            let newField = getter newDat
+            let oldField = getter oldDat
+            if newField == oldField
+                then return ()
+                else applicator newField)
+
+-- ----------------------------------------------
+-- * Editing preferences
+--
+
+initPrefs :: StateM ()
+initPrefs  = do
+    prefsPath <- getCurrentPrefsPath
+    RegisterPrefs allPrefs <- triggerFormsEvent
+        (RegisterPrefs [("Frame",GenF panesPrefs defaultPanePrefs)])
+    liftIO $ putStrLn ("Categories: " ++ show (map fst allPrefs))
+    case validatePrefs allPrefs of
+        Nothing -> return ()
+        Just str -> error $ "Description>>formsInit2::"++ str
+    setState PrefsDescrState allPrefs
+    hasPrefsFile <- liftIO $ doesFileExist prefsPath
+    when hasPrefsFile $
+        loadPrefs prefsPath
+
+defaultPanePrefs =  PanePrefs [] [] [SplitP LeftP]
 
 panesPrefs :: FieldDescription PanePrefs
 panesPrefs =
@@ -117,69 +205,5 @@ panesPrefs =
             (\b a -> a{ppDefaultPath = b})
             genericEditor
             (\_i -> return ())]
-
-formsInit2 :: BaseEvent -> PEvent FormsEvent -> StateM ()
-formsInit2 _baseEvent _myEvent = do
-    message Debug ("init2 " ++ pluginNameForms)
-    RegisterPrefs allPrefs <- triggerFormsEvent
-        (RegisterPrefs [("Frame",GenF panesPrefs defaultPanePrefs)])
-    case validatePrefs allPrefs of
-        Nothing -> return ()
-        Just str -> error $ "Description>>formsInit2::"++ str
-    setState PrefsDescrState allPrefs
-    registerFrameEvent handler >> return ()
-  where handler (RegisterActions actions) = return $ RegisterActions $ actions ++ myActions
-        handler (RegisterPane paneTypes)  = return $ RegisterPane $ paneTypes ++ myPaneTypes
-        handler e                         = return e
-
-myActions :: [ActionDescr]
-myActions =
-    [AD "Configuration" "_Configuration" Nothing Nothing (return ()) Nothing ActionSubmenu
-            (Just $ MPAfter ["View"] False) Nothing [],
-     AD "EditPrefs" "EditPrefs" Nothing Nothing openPreferencesPane Nothing ActionNormal
-        (Just $ MPLast ["Configuration"] False) Nothing []]
-
-myPaneTypes :: [(String,GenPane)]
-myPaneTypes =
-    [asRegisterType (undefined :: PreferencesPane)]
-
-initialRegister :: StateM (Maybe String)
-initialRegister = do
-    registerState GuiHandlerStateSel (Handlers Map.empty)
-    registerState GtkEventsStateSel (GtkRegMap Map.empty)
-    registerState PrefsDescrState []
-
-type MkFieldDescription alpha beta =
-    Parameters      ->
-    (Printer beta)     ->
-    (Parser beta)      ->
-    (Getter alpha beta)    ->
-    (Setter alpha beta)    ->
-    (Editor beta)      ->
-    (Applicator beta)  ->
-    FieldDescription alpha
-
-mkField :: Eq beta => MkFieldDescription alpha beta
-mkField parameters printer parser getter setter editor applicator  =
-    let FieldG _ ed = mkFieldG (getParaS "Name" parameters) parameters getter setter editor
-    in Field parameters
-        (\ dat -> (PP.text (getParaS "Name" parameters) PP.<> PP.colon)
-                PP.$$ (PP.nest 15 (printer (getter dat)))
-                PP.$$ (PP.nest 5 (case getPara "Synopsis" parameters of
-                                    ParaString "" -> PP.empty
-                                    ParaString str -> PP.text $"--" ++ str
-                                    _ -> error "Description>>mkField: impossible")))
-        (\ dat -> P.try (do
-            symbol (let ParaString str = getPara "Name" parameters in str)
-            colon
-            val <- parser
-            return (setter val dat)))
-        ed
-        (\ newDat oldDat -> do --applicator
-            let newField = getter newDat
-            let oldField = getter oldDat
-            if newField == oldField
-                then return ()
-                else applicator newField)
 
 

@@ -331,8 +331,10 @@ populate = mapM_ (\ (typeString,mbPs,pp) -> do
 
 populate' :: forall alpha . Pane alpha =>  alpha  -> String -> PanePath -> StateM ()
 populate' _ readString panePath = do
-    let paneState :: (PaneState alpha) = read readString
-    recoverState panePath paneState  >> return ()
+    let mbPaneState :: Maybe (PaneState alpha) = maybeRead readString
+    case mbPaneState of
+        Just ps -> recoverState panePath ps  >> return ()
+        Nothing -> message Error "Can't read session state, no recovery possible"
 
 setCurrentPages :: PaneLayout -> StateM ()
 setCurrentPages layout = setCurrentPages' layout []
@@ -357,8 +359,11 @@ applyExtension genList (name,readString) =
         Nothing                                                    ->
             message Error ("Session>>applyExtension: Extension not found: " ++ name)
         Just (GenS (SessionExtension {seApplicator = applicator})) -> do
-            let val = read readString
-            applicator val
+            let mbVal = maybeRead readString
+            case mbVal of
+                Just val -> applicator val
+                Nothing -> message Error $ "Session>>applyExtension: " ++
+                    "can't apply session extension " ++ readString
 
 findExtension :: String -> [GenSessionExtension] -> Maybe GenSessionExtension
 findExtension str [] = Nothing

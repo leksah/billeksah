@@ -22,6 +22,7 @@ import Base.Plugin
 import Base.Config
 import Base.PluginTypes
 import Base.Event
+import Base.MyMissing
 
 import System.Console.GetOpt
        (ArgDescr(..), OptDescr(..), usageInfo, ArgOrder(..),
@@ -73,8 +74,11 @@ main = do
                                             Verbosity s -> True
                                             _           -> False) o of
                             Nothing            -> Info
-                            Just (Verbosity v) -> read v
-
+                            Just (Verbosity v) -> case maybeRead v of
+                                                    Just v' -> v'
+                                                    Nothing -> error $
+                                                        "Main>>main: unknown verbosity "
+                                                             ++ v
     when (elem Version o) $ do
         putStrLn $ "billeksah-base, version " ++ showVersion version
         exitSuccess
