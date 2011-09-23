@@ -15,12 +15,14 @@
 
 module Graphics.Pane (
     startupFrame,
+    setSensitivity,
+    panePluginInterface,
+
     module Graphics.Frame,
     module Graphics.FrameTypes,
     module Graphics.Panes,
-    module Graphics.Session,
-    setSensitivity,
-    panePluginInterface
+    module Graphics.Session
+
 ) where
 
 import Base

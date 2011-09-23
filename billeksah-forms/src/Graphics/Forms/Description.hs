@@ -14,11 +14,7 @@
 --
 -----------------------------------------------------------------------------------
 module Graphics.Forms.Description (
-    FieldDescription(..)
-,   GenFieldDescription
-,   mkField
-,   toFieldDescriptionG
-,   toFieldDescriptionS
+    mkField
 ,   formsPluginInterface
 ,   initPrefs
 ) where
@@ -38,9 +34,17 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.ParserCombinators.Parsec as P
 import Data.Version (Version(..))
 import qualified Data.Map as Map (empty)
-import Base.Preferences
-       (FieldDescription(..), FieldDescription, GenFieldDescription,
-        validatePrefs)
+import Base.Preferences (loadPrefs, validatePrefs)
+import Graphics.Forms.Composite
+       (pairEditor, ColumnDescr(..), multisetEditor)
+import Graphics.Forms.Simple (genericEditor, stringEditor)
+import Data.List (sortBy)
+import Graphics.Panes.Preferences
+       (PreferencesPane, openPreferencesPane)
+import Control.Monad (liftM, when)
+import System.FilePath ((</>), dropFileName)
+import System.Directory (doesFileExist)
+import Control.Monad.IO.Class (MonadIO(..))
 
 -- ----------------------------------------------
 -- * It's a plugin
@@ -66,23 +70,35 @@ formsInit1 _baseEvent _myEvent = do
     initialRegister
     return ()
 
-framePrefs = []
-
 formsInit2 :: BaseEvent -> PEvent FormsEvent -> StateM ()
 formsInit2 _baseEvent _myEvent = do
     message Debug ("init2 " ++ pluginNameForms)
-    RegisterPrefs allPrefs <- triggerFormsEvent (RegisterPrefs framePrefs)
-    case validatePrefs allPrefs of
-        Nothing -> return ()
-        Just str -> error $ "Description>>formsInit2::"++ str
-    setState PrefsDescrState allPrefs
-    return ()
+    registerFrameEvent handler >> return ()
+  where handler (RegisterActions actions) = return $ RegisterActions $ actions ++ myActions
+        handler (RegisterPane paneTypes)  = return $ RegisterPane $ paneTypes ++ myPaneTypes
+        handler e                         = return e
 
+myActions :: [ActionDescr]
+myActions =
+    [AD "Configuration" "_Configuration" Nothing Nothing (return ()) Nothing ActionSubmenu
+            (Just $ MPAfter ["View"] False) Nothing [],
+     AD "EditPrefs" "EditPrefs" Nothing Nothing openPreferencesPane Nothing ActionNormal
+        (Just $ MPLast ["Configuration"] False) Nothing []]
 
+myPaneTypes :: [(String,GenPane)]
+myPaneTypes =
+    [asRegisterType (undefined :: PreferencesPane)]
+
+defaultPrefsName :: String
+defaultPrefsName = "Default.prefs"
+
+initialRegister :: StateM (Maybe String)
 initialRegister = do
     registerState GuiHandlerStateSel (Handlers Map.empty)
     registerState GtkEventsStateSel (GtkRegMap Map.empty)
     registerState PrefsDescrState []
+    currentConfigPath <- liftM dropFileName getCurrentConfigPath
+    registerCurrentPrefsPath (currentConfigPath </> defaultPrefsName)
 
 type MkFieldDescription alpha beta =
     Parameters      ->
@@ -189,5 +205,4 @@ panesPrefs =
             (\b a -> a{ppDefaultPath = b})
             genericEditor
             (\_i -> return ())]
-
 

@@ -1,4 +1,4 @@
-{-# Language ExistentialQuantification #-}
+{-# Language ExistentialQuantification, TypeFamilies, DeriveDataTypeable #-}
 
 -----------------------------------------------------------------------------
 --
@@ -15,45 +15,69 @@
 module Base.Preferences (
     loadPrefs
 ,   savePrefs
-,   editPrefs
 ,   validatePrefs
 
-,   getPref
-,   setPref
-,   FieldDescription(..)
-,   GenFieldDescription
+,   getPrefs
+,   setPrefs
+
 ) where
 
 import Base
-import Data.List ((\\), nub)
-import Graphics.Forms.Parameters (Parameters)
-import qualified Text.PrettyPrint as PP (Doc)
-import qualified Text.ParserCombinators.Parsec as P (CharParser)
-import Graphics.UI.Gtk (Widget)
-import Graphics.Forms.Basics (GEvent, Extractor, Injector)
 
-data FieldDescription alpha =  Field {
-        fdParameters      ::  Parameters
-    ,   fdFieldPrinter    ::  alpha -> PP.Doc
-    ,   fdFieldParser     ::  alpha -> P.CharParser () alpha
-    ,   fdFieldEditor     ::  alpha -> StateM (Widget, Injector alpha , alpha -> Extractor alpha , GEvent)
-    ,   fdApplicator      ::  alpha -> alpha -> StateM ()}
-    | VertBox Parameters [FieldDescription alpha] -- ^ Vertical Box
-    | HoriBox Parameters [FieldDescription alpha] -- ^ Horizontal Box
-    | TabbedBox [(String,FieldDescription alpha)]   -- ^ Notebook
+import Graphics.Forms.Parameters
+import Graphics.Forms.Basics
 
-data GenFieldDescription = forall alpha . GF (FieldDescription alpha)
+import Data.List (sortBy, (\\), nub)
+import Data.Typeable (Typeable(..), Typeable)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad (when)
+import Graphics.Panes
+       (Direction(..), PaneDirection(..), PanePathElement(..))
+import Graphics.UI.Gtk.General.Enums (ShadowType(..))
+import qualified Text.PrettyPrint as PP (text)
+import Graphics.Forms.Composite
+       (pairEditor, ColumnDescr(..), multisetEditor)
+import Graphics.UI.Gtk (cellText)
+import System.Glib.Attributes (AttrOp(..))
+import Graphics.Forms.Simple (genericEditor, stringEditor)
+import Debug.Trace (trace)
+
+-------------------------------------
+-- * The functions to handle preferences
+--
+
+
 
 --
 -- | Checks uniqness of categories
 --
-validatePrefs :: [(String, [GenFieldDescription])] -> Maybe String
+validatePrefs :: [(String,GenFieldDescription)] -> Maybe String
 validatePrefs prefsDescr =
-    let categories = map fst prefsDescr
+    let categories = map (\(cat,_) -> cat) prefsDescr
         nCats = nub categories
     in if nCats /= categories
             then Just $ "duplicate categories:" ++ show (categories \\ nCats)
             else Nothing
+
+--
+-- | Load preferences from filepath.
+-- Pref descriptions needs to be registered before
+loadPrefs :: FilePath -> StateM ()
+loadPrefs fp          =  trace "loadPrefs" $ do
+    allPrefs <- getState PrefsDescrState
+    let allPrefsS = map (\(s,GenF descr val) -> (s, GenFS (toFieldDescriptionS descr) val)) allPrefs
+    Left loadedPrefs <- liftIO $ readFields fp (Left allPrefsS)
+    let newPrefs =  map (exchangeValues loadedPrefs) allPrefs
+    trace ("loadedPrefs " ++ show (length loadedPrefs)) $ setState PrefsDescrState newPrefs
+    triggerFormsEvent PrefsChanged >> return ()
+  where
+    exchangeValues :: [(String, GenFieldDescriptionS)] -> (String, GenFieldDescription)
+        -> (String, GenFieldDescription)
+    exchangeValues loadedPrefs (s1, GenF fda a) =
+        case [gen | (s2, gen) <- loadedPrefs, s1 == s2] of
+            [GenFS _ newValue] ->   let nv = myCast "Preferences>>loadPrefs:" newValue
+                            in (s1, GenF fda nv)
+            _ -> (s1, GenF fda a)
 
 --
 -- | Save preferences to filepath.
@@ -66,18 +90,6 @@ savePrefs fp          =  do
     liftIO $ writeFile fp string
     triggerFormsEvent PrefsChanged >> return ()
 
---
--- | Load preferences from filepath.
--- Pref descriptions needs to be registered before
-loadPrefs :: FilePath -> StateM ()
-loadPrefs fp          =  undefined
-
-
---
--- | Save preferences to filepath.
--- Pref descriptions needs to be registered before
-editPrefs             ::  StateM ()
-editPrefs             =  undefined
 
 --
 -- | Gets a preference value from a category and a key
