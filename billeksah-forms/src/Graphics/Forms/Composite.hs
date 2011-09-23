@@ -55,6 +55,7 @@ import Distribution.Simple
 import Distribution.Text (simpleParse, display)
 import Data.Version (Version(..))
 import qualified Graphics.UI.Gtk.Gdk.Events as Gtk (Event(..))
+import Debug.Trace (trace)
 import Data.Typeable (Typeable)
 
 
@@ -780,7 +781,7 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                             mbVal <- case rows of
                                         ([i]:_) -> liftM (Just . GenSelection)
                                             (listStoreGetValue listStore i)
-                                        _ -> return Nothing
+                                        otherwise -> return Nothing
 
                             reflectState (triggerGUIEvent notifier (dummyGUIEvent {
                                 geSelector = Selection,
@@ -788,8 +789,7 @@ selectionEditor (ColumnDescr showHeaders columnsDD) mbSort mbTest mbDeleteHandle
                                 geMbSelection = mbVal,
                                 geGtkReturn = True})) stateR
                             return False
-                    _ -> return False)
-
+                    otherwise -> return False)
 
 
 -- a trivial example: (ColumnDescr False [("",(\row -> [cellText := show row]))])
