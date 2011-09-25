@@ -32,9 +32,7 @@ module Base.Plugin (
     getBaseEvent
 ) where
 
-import Base.Event
-import Base.PluginTypes
-import Base.State
+import Base
 
 import Data.Version (showVersion, Version(..))
 import Data.IORef (writeIORef, readIORef, newIORef)

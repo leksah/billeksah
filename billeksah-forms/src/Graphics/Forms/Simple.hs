@@ -38,11 +38,12 @@ module Graphics.Forms.Simple (
 
 
 import Base
+import Graphics.Pane
+
 import Graphics.Forms.Basics
 import Graphics.Forms.Parameters
 import Graphics.Forms.Build
 import Graphics.Forms.GUIEvent
-import Graphics.Panes (Direction(..))
 
 import Graphics.UI.Gtk hiding (eventKeyName, eventModifier)
 import Control.Monad

@@ -38,8 +38,7 @@ import Graphics.Forms.Build
 import Graphics.Forms.Simple
 import Graphics.Forms.GUIEvent
 import Graphics.Forms.Default
-import Base.State
-import Base.MyMissing (forceJust)
+import Base
 import Graphics.Pane (Direction(..), castCID)
 
 

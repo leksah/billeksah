@@ -36,11 +36,11 @@ module Graphics.Forms.Build (
 
 
 import Base
+import Graphics.Pane hiding (newNotebook)
 
 import Graphics.Forms.Parameters
 import Graphics.Forms.Basics
 import Graphics.Forms.GUIEvent
-import Graphics.Panes (Direction(..))
 
 import Graphics.UI.Gtk
 import Control.Monad

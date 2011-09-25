@@ -169,7 +169,8 @@ getStateM = do
     return st
 
 --
--- | Registers a key and sets the value
+-- | Registers a key and sets the value. Returns nothing if everything works,
+-- else just an error string
 --
 registerState :: Selector alpha => alpha -> ValueType alpha -> StateM (Maybe String)
 registerState key value = do

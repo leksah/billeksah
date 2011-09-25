@@ -31,6 +31,7 @@ import Graphics.UI.Gtk
 import Data.Typeable (Typeable)
 import Base.Preferences (savePrefs, setPrefs)
 
+-- | opens up an editor for preferences
 openPreferencesPane ::  StateM ()
 openPreferencesPane = do
     message Debug "Open preferences pane"

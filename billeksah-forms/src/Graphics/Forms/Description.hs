@@ -23,10 +23,7 @@ import Graphics.Forms.Basics
 import Graphics.Forms.Parameters
 import Graphics.Forms.Build
 import Graphics.Forms.GUIEvent
-import Graphics.Panes
-import Graphics.Frame
-import Graphics.FrameTypes
-import Graphics.Session
+import Graphics.Pane
 import Base
 
 import Graphics.UI.Gtk

@@ -156,7 +156,6 @@ data FrameEvent =
     | RegisterPane [(String, GenPane)]
     | RegisterSessionExt [GenSessionExtension]
     | RegisterStatusbarComp [CompDescr]
-        deriving Typeable
 
 makeFrameEvent :: StateM(PEvent FrameEvent)
 makeFrameEvent = makeEvent FrameEventSel

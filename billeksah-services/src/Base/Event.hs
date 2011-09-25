@@ -103,7 +103,7 @@ data EventFactory event handlers = EventFactory {
 --
 
 --
--- | Constructs a new event. The plugin name has to be unique!
+-- | Constructs a new event.
 --
 makeEvent :: (EventSelector alpha,ValueType alpha ~  PEvent (BaseType alpha))
                 => alpha -> StateM (ValueType alpha)
@@ -126,7 +126,8 @@ getEvent :: Selector alpha => alpha -> StateM (ValueType alpha)
 getEvent = getState
 
 --
--- | Registers an event handler for this event
+-- | Registers an event handler for this event.
+-- The HandlerID is for unregistering the event
 --
 registerEvent :: PEvent alpha -> Handler alpha -> StateM (HandlerID)
 registerEvent event handler = do

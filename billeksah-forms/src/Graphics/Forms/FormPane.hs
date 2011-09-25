@@ -29,8 +29,7 @@ import Graphics.Forms.GUIEvent
 import Graphics.Forms.Basics
        (GEvent, GenValue(..), Extractor, Injector, GUIEvent(..),
         GUIEventSelector(..))
-import Graphics.Frame (setChanged, closePane, Pane)
-import Graphics.Panes (Connections, PanePath, castCID)
+import Graphics.Pane
 
 import Graphics.UI.Gtk
 import Control.Monad.IO.Class (MonadIO(..))

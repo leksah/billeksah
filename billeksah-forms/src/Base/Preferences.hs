@@ -23,6 +23,7 @@ module Base.Preferences (
 ) where
 
 import Base
+import Graphics.Pane
 
 import Graphics.Forms.Parameters
 import Graphics.Forms.Basics
@@ -31,8 +32,6 @@ import Data.List (sortBy, (\\), nub)
 import Data.Typeable (Typeable(..), Typeable)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad (when)
-import Graphics.Panes
-       (Direction(..), PaneDirection(..), PanePathElement(..))
 import Graphics.UI.Gtk.General.Enums (ShadowType(..))
 import qualified Text.PrettyPrint as PP (text)
 import Graphics.Forms.Composite
@@ -92,7 +91,7 @@ savePrefs fp          =  do
 
 
 --
--- | Gets a preference value from a category and a key
+-- | Gets a preference value from a category
 --
 getPrefs :: Typeable alpha => String -> StateM alpha
 getPrefs category = do
@@ -105,7 +104,7 @@ getPrefs category = do
         _        -> error ("Preferences>>getPrefs: category not found: " ++ category)
 
 --
--- | Sets a preference value for a category and a key
+-- | Sets a preference value for a category
 --
 setPrefs :: (Eq alpha , Typeable alpha) => String -> alpha -> StateM ()
 setPrefs category value = do

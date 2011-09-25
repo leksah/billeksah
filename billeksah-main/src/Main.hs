@@ -19,10 +19,7 @@ module Main (
 ) where
 
 import Base.Plugin
-import Base.Config
-import Base.PluginTypes
-import Base.Event
-import Base.MyMissing
+import Base
 
 import System.Console.GetOpt
        (ArgDescr(..), OptDescr(..), usageInfo, ArgOrder(..),
@@ -31,7 +28,7 @@ import System.Environment (getArgs)
 import System.FilePath (dropFileName)
 import Data.IORef (newIORef)
 import qualified Data.Map as Map (empty)
-import Base.State (runState)
+import Base
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Maybe (catMaybes)
 import Control.Monad (when)

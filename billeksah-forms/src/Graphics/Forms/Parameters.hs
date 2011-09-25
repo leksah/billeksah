@@ -26,8 +26,7 @@ module Graphics.Forms.Parameters (
 ) where
 
 import Base
-import Graphics.Pane (Direction)
-import Graphics.Panes (Direction(..))
+import Graphics.Pane
 
 import Graphics.UI.Gtk (Packing, ShadowType)
 import Graphics.UI.Gtk.General.Enums (Packing(..), ShadowType(..))

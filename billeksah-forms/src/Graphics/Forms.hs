@@ -21,7 +21,9 @@ module Graphics.Forms (
     module Graphics.Forms.GUIEvent,
     module Graphics.Forms.Parameters,
     module Graphics.Forms.Simple,
-    module Graphics.Forms.FormPane
+    module Graphics.Forms.FormPane,
+    module Base.Preferences,
+    module Graphics.Panes.Preferences
 
 ) where
 
@@ -34,4 +36,6 @@ import Graphics.Forms.GUIEvent
 import Graphics.Forms.Parameters
 import Graphics.Forms.Simple
 import Graphics.Forms.FormPane
+import Base.Preferences
+import Graphics.Panes.Preferences
 
