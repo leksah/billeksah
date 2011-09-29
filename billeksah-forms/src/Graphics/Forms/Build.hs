@@ -151,10 +151,10 @@ buildEditor (TabbedBoxG pairList)   v   =   buildEditorPrim pairList
 buildEditorPrim
   :: (WidgetClass child) =>
      [(String, beta)]
-     -> StateM [(child,  Injector alpha, alpha -> Extractor alpha, PEvent GUIEvent)]
+     -> StateM [(child,  Injector alpha, alpha -> Extractor alpha, EventChannel GUIEvent)]
      -> ([Injector alpha] -> Injector gamma)
      -> ([alpha -> Extractor alpha] -> gamma -> Extractor gamma)
-     -> StateM (Widget, Injector gamma, gamma -> Extractor gamma, PEvent GUIEvent)
+     -> StateM (Widget, Injector gamma, gamma -> Extractor gamma, EventChannel GUIEvent)
 buildEditorPrim pairList builder injector extractor =   do
     reifyState $ \ stateR -> do
         nb <- newNotebook

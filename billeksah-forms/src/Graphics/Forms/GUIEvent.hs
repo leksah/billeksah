@@ -112,7 +112,7 @@ withGtkHandlers = withState GtkEventsStateSel
 --
 -- | Constructs a new event. The plugin name has to be unique!
 --
-makeGUIEvent :: StateM (PEvent GUIEvent)
+makeGUIEvent :: StateM (EventChannel GUIEvent)
 makeGUIEvent = do
     let ef           =  guiEventFactory
     ev <- mkEvent (undefined :: GUIEventSelector) ef
@@ -160,7 +160,7 @@ dummyGUIEvent = GUIEvent{
 activateGUIEvent
   :: (GObjectClass o) =>
      o
-     -> PEvent GUIEvent
+     -> EventChannel GUIEvent
      -> GUIEventSelector
      -> StateM ()
 activateGUIEvent widget event eventSel = do
@@ -170,7 +170,7 @@ activateGUIEvent widget event eventSel = do
 activateGUIEvent'
   :: (GObjectClass o) =>
      o
-     -> PEvent GUIEvent
+     -> EventChannel GUIEvent
      -> (o -> GtkHandler -> IO Connection)
      -> GUIEventSelector
      -> StateM ()

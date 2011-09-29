@@ -54,7 +54,7 @@ panePluginInterface = do
          piName    = panePluginName,
          piVersion = Version [1,0,0][]}
 
-frameInit1 :: BaseEvent -> PEvent FrameEvent -> StateM ()
+frameInit1 :: BaseEvent -> EventChannel FrameEvent -> StateM ()
 frameInit1 baseEvent myEvent = do
     message Debug ("init1 " ++ panePluginName)
     res <- registerActionState initialActionState
@@ -63,7 +63,7 @@ frameInit1 baseEvent myEvent = do
         Just s ->  message Error s
     return ()
 
-frameInit2 :: BaseEvent -> PEvent FrameEvent -> StateM ()
+frameInit2 :: BaseEvent -> EventChannel FrameEvent -> StateM ()
 frameInit2 baseEvent myEvent = do
     message Debug ("init2 " ++ panePluginName)
     uiManager <- reifyState (\stateR -> do

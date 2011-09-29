@@ -32,7 +32,7 @@ module Base.Event (
     Handlers(..),
     EvtID,
     HandlerID,
-    PEvent(..),
+    EventChannel(..),
     EventFactory(..),
 
 -- * Low level interface
@@ -70,7 +70,7 @@ type HandlerID = Unique
 -- | An event has a unique id, can be triggered, and callbacks can be registered
 -- and unregistered
 --
-data PEvent event = PEvent {
+data EventChannel event = EventChannel {
     evtRegister    :: Handler event  -> HandlerID -> StateM (),
     evtUnregister  :: HandlerID -> StateM (),
     evtTrigger     :: event -> StateM event,
@@ -102,9 +102,9 @@ data EventFactory event handlers = EventFactory {
 -- | Constructs a new event. The plugin name has to be unique!
 --
 makeEvent
-  :: (ValueType alpha ~ PEvent event, Selector alpha) =>
+  :: (ValueType alpha ~ EventChannel event, Selector alpha) =>
      alpha
-     -> StateM (PEvent event)
+     -> StateM (EventChannel event)
 makeEvent selector = do
     ideRef           <- liftIO $ newIORef (Handlers Map.empty)
     let ef           =  stdEventFactory selector ideRef
@@ -126,7 +126,7 @@ getEvent = getState
 --
 -- | Registers an event handler for this event
 --
-registerEvent :: PEvent alpha -> Handler alpha -> StateM (HandlerID)
+registerEvent :: EventChannel alpha -> Handler alpha -> StateM (HandlerID)
 registerEvent event handler = do
     newEvtID         <- liftIO $ newUnique
     (evtRegister event) handler newEvtID
@@ -135,7 +135,7 @@ registerEvent event handler = do
 --
 -- | Registers an event handler for this event, without returning a Value
 --
-registerEvent' :: PEvent alpha -> (alpha -> StateM ()) -> StateM (HandlerID)
+registerEvent' :: EventChannel alpha -> (alpha -> StateM ()) -> StateM (HandlerID)
 registerEvent' event handler = do
     newEvtID         <- liftIO $ newUnique
     (evtRegister event) (\ e -> handler e >> return e) newEvtID
@@ -144,17 +144,17 @@ registerEvent' event handler = do
 --
 -- | Triggers the event with the provided value
 --
-triggerEvent ::  (Selector alpha, ValueType alpha ~ PEvent event)
+triggerEvent ::  (Selector alpha, ValueType alpha ~ EventChannel event)
     => alpha  -> event  -> StateM event
 triggerEvent sel e = getEvent sel >>= \ event -> (evtTrigger event) e
 
 --
 -- | Merge two event streams of the same type
 --
-unionEvent :: PEvent event  -> PEvent event  -> StateM (PEvent event)
+unionEvent :: EventChannel event  -> EventChannel event  -> StateM (EventChannel event)
 unionEvent e1 e2 = do
     newEvtID <- newEventID
-    return $ PEvent {
+    return $ EventChannel {
         evtRegister    = \ handler newHdlIdID -> do
             (evtRegister e1) handler newHdlIdID
             (evtRegister e2) handler newHdlIdID,
@@ -169,10 +169,10 @@ unionEvent e1 e2 = do
 --
 -- | Allow all events that fulfill the predicate, discard the rest. Think of it as
 --
-filterEvent :: (e -> Bool) -> PEvent e -> StateM (PEvent e)
+filterEvent :: (e -> Bool) -> EventChannel e -> StateM (EventChannel e)
 filterEvent filterFunc event = do
     newEvtID <- newEventID
-    return $ PEvent {
+    return $ EventChannel {
         evtRegister    = \ handler newHdlId -> do
             (evtRegister event) (newHandler handler) newHdlId,
         evtUnregister  = evtUnregister event,
@@ -187,11 +187,11 @@ filterEvent filterFunc event = do
 --
 -- | Propagate event ...
 --
-propagateEvent :: PEvent e -> [PEvent e] -> StateM ()
+propagateEvent :: EventChannel e -> [EventChannel e] -> StateM ()
 propagateEvent to fromList =
     mapM_ (\ from -> registerEvent from (\e -> (evtTrigger to) e)) fromList
 
-retriggerEvent :: PEvent e -> (e -> Maybe e) -> StateM ()
+retriggerEvent :: EventChannel e -> (e -> Maybe e) -> StateM ()
 retriggerEvent event trans =
     registerEvent event (\e -> case trans e of
                                     Nothing -> return e
@@ -200,7 +200,7 @@ retriggerEvent event trans =
 --   ---------------------------------
 --  Low level implementation
 --
-stdEventFactory :: (Selector alpha, ValueType alpha ~ PEvent event) => alpha ->
+stdEventFactory :: (Selector alpha, ValueType alpha ~ EventChannel event) => alpha ->
     IORef (Handlers event) -> EventFactory event (Handlers event)
 stdEventFactory _ handlersRef = EventFactory {
         efGetHandlers = liftIO $ readIORef handlersRef,
@@ -209,15 +209,15 @@ stdEventFactory _ handlersRef = EventFactory {
 newEventID = liftIO $ newUnique
 
 --
--- | Make an PEvent in the IO Monad
+-- | Make an EventChannel in the IO Monad
 --
 mkEvent
-  :: (Selector alpha, ValueType alpha ~ PEvent event) => alpha
+  :: (Selector alpha, ValueType alpha ~ EventChannel event) => alpha
      -> EventFactory event (Handlers event)
      -> StateM (ValueType alpha)
 mkEvent _ ef@EventFactory{efGetHandlers = getHandlers, efSetHandlers = setHandlers} = do
     newEvtID <- newEventID
-    return $ PEvent {
+    return $ EventChannel {
         evtRegister     = \ handler newUni -> do
             Handlers handlerMap  <-  getHandlers
             let newHandlers =   case newEvtID `Map.lookup` handlerMap of

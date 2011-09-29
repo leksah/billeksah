@@ -139,7 +139,7 @@ data FrameEventSel = FrameEventSel
     deriving (Eq, Ord, Show, Typeable)
 
 instance Selector FrameEventSel where
-    type ValueType FrameEventSel = PEvent FrameEvent
+    type ValueType FrameEventSel = EventChannel FrameEvent
 
 --
 -- | Events the gui frame triggers
@@ -154,13 +154,13 @@ data FrameEvent =
     | RegisterSessionExt [GenSessionExtension]
     | RegisterStatusbarComp [CompDescr]
 
-makeFrameEvent :: StateM(PEvent FrameEvent)
+makeFrameEvent :: StateM(EventChannel FrameEvent)
 makeFrameEvent = makeEvent FrameEventSel
 
 triggerFrameEvent :: FrameEvent -> StateM(FrameEvent)
 triggerFrameEvent          = triggerEvent FrameEventSel
 
-getFrameEvent :: StateM (PEvent FrameEvent)
+getFrameEvent :: StateM (EventChannel FrameEvent)
 getFrameEvent              = getEvent FrameEventSel
 
 registerFrameEvent hdl = getFrameEvent >>= \ev -> registerEvent ev hdl

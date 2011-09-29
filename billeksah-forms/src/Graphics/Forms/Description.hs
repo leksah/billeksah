@@ -61,13 +61,13 @@ formsPluginInterface = do
 -- * Initialization
 --
 
-formsInit1 :: BaseEvent -> PEvent FormsEvent -> StateM ()
+formsInit1 :: BaseEvent -> EventChannel FormsEvent -> StateM ()
 formsInit1 _baseEvent _myEvent = do
     message Debug ("init1 " ++ pluginNameForms)
     initialRegister
     return ()
 
-formsInit2 :: BaseEvent -> PEvent FormsEvent -> StateM ()
+formsInit2 :: BaseEvent -> EventChannel FormsEvent -> StateM ()
 formsInit2 _baseEvent _myEvent = do
     message Debug ("init2 " ++ pluginNameForms)
     registerFrameEvent handler >> return ()

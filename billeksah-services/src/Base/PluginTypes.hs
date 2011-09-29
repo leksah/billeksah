@@ -33,15 +33,15 @@ import Control.Monad (when)
 data MessageLevel = Debug | Info | Warning | Error
     deriving(Eq,Ord,Show,Read)
 
-type BaseEvent = PEvent BaseEventValue
+type BaseEvent = EventChannel BaseEventValue
 
 data BaseEventValue = StartUp | BaseLog MessageLevel String
 
 data PluginInterface event =
     PluginInterface {
-        piInit1   :: BaseEvent -> PEvent event -> StateM (),
-        piInit2   :: BaseEvent -> PEvent event -> StateM (),
-        piEvent   :: PEvent event,
+        piInit1   :: BaseEvent -> EventChannel event -> StateM (),
+        piInit2   :: BaseEvent -> EventChannel event -> StateM (),
+        piEvent   :: EventChannel event,
         piName    :: String,
         piVersion :: Version}
 
@@ -93,7 +93,7 @@ data BaseEventSel = BaseEventSel
     deriving (Eq,Ord,Show,Typeable)
 
 instance Selector BaseEventSel where
-    type ValueType BaseEventSel = PEvent BaseEventValue
+    type ValueType BaseEventSel = EventChannel BaseEventValue
 
 -- | ConfigPathSel | MessageLevelSel
 

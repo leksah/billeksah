@@ -102,7 +102,7 @@ type Applicator beta  =   beta -> StateM ()
 -- alpha is the type of the individual field of the record
 type Editor alpha  =   Parameters -> GEvent -> StateM(Widget, Injector alpha , Extractor alpha)
 
-type GEvent = PEvent GUIEvent
+type GEvent = EventChannel GUIEvent
 
 --
 -- | A type for an event in the GUI
@@ -129,7 +129,7 @@ data GUIEventSelector = FocusOut        -- ^ generic, the widget looses the focu
     deriving (Eq,Ord,Show,Bounded, Typeable, Enum)
 
 instance Selector GUIEventSelector where
-    type ValueType GUIEventSelector = PEvent GUIEvent
+    type ValueType GUIEventSelector = EventChannel GUIEvent
 
 data GenSelection = forall alpha . Typeable alpha => GenSelection alpha
 
@@ -230,12 +230,12 @@ data FormsEventSel = FormsEventSel
     deriving (Eq, Ord, Show, Typeable)
 
 instance Selector FormsEventSel where
-    type ValueType FormsEventSel = PEvent FormsEvent
+    type ValueType FormsEventSel = EventChannel FormsEvent
 
 triggerFormsEvent :: FormsEvent -> StateM (FormsEvent)
 triggerFormsEvent = triggerEvent FormsEventSel
 
-getFormsEvent :: StateM (PEvent FormsEvent)
+getFormsEvent :: StateM (EventChannel FormsEvent)
 getFormsEvent = getEvent FormsEventSel
 
 -------------------------------------
