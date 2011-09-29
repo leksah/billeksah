@@ -29,8 +29,7 @@ module Base.MyMissing (
 import Data.List (find,unfoldr)
 import Data.Maybe (listToMaybe, isJust)
 import Data.Char (isSpace)
-import Data.Typeable (Typeable(..), Typeable)
-import Unsafe.Coerce (unsafeCoerce)
+import Data.Typeable (cast, Typeable(..), Typeable)
 
 
 -- | remove leading and trailing spaces
@@ -96,15 +95,11 @@ insertAt i e l | i < 0        = e : l
                                 in start ++ (e : end)
 
 -- | The type-safe cast operation
-myCast :: (Typeable a, Typeable b) => String -> a -> b
-myCast errorString x = r
-  where
-    xt = typeOf x
-    rt = typeOf r
-    r  = if xt == rt
-           then unsafeCoerce x
-           else error $ errorString ++ ". Cast error inputType: " ++ show xt
-                            ++ " outputType: " ++ show rt
+myCast :: forall a b . (Typeable a, Typeable b) => String -> a -> b
+myCast errorString x = case cast x of
+                        Just x' -> x'
+                        Nothing ->  error $ errorString ++ ". Cast error inputType: " ++ show (typeOf x)
+                                            ++ " outputType: " ++ show (typeOf (undefined :: a))
 
 -- | a read which may fail
 

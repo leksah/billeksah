@@ -95,9 +95,6 @@ data BaseEventSel = BaseEventSel
 instance Selector BaseEventSel where
     type ValueType BaseEventSel = PEvent BaseEventValue
 
-instance EventSelector BaseEventSel where
-    type BaseType BaseEventSel = BaseEventValue
-
 -- | ConfigPathSel | MessageLevelSel
 
 triggerBaseEvent :: BaseEventValue -> StateM(BaseEventValue)

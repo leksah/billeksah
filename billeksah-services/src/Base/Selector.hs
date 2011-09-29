@@ -30,6 +30,8 @@ import System.IO.Unsafe (unsafePerformIO)
 ----
 class (Eq alpha, Ord alpha, Show alpha, Typeable alpha) => Selector alpha where
     type ValueType alpha :: *
+    valueCast :: (alpha ~ beta) => alpha -> ValueType beta -> ValueType alpha
+    valueCast sel val = val
 
 --
 -- | Boxing for selectors

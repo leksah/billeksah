@@ -131,9 +131,6 @@ data GUIEventSelector = FocusOut        -- ^ generic, the widget looses the focu
 instance Selector GUIEventSelector where
     type ValueType GUIEventSelector = PEvent GUIEvent
 
-instance EventSelector GUIEventSelector where
-    type BaseType GUIEventSelector = GUIEvent
-
 data GenSelection = forall alpha . Typeable alpha => GenSelection alpha
 
 allGUIEvents, genericGUIEvents :: [GUIEventSelector]
@@ -234,10 +231,6 @@ data FormsEventSel = FormsEventSel
 
 instance Selector FormsEventSel where
     type ValueType FormsEventSel = PEvent FormsEvent
-
-instance EventSelector FormsEventSel where
-    type BaseType FormsEventSel = FormsEvent
-
 
 triggerFormsEvent :: FormsEvent -> StateM (FormsEvent)
 triggerFormsEvent = triggerEvent FormsEventSel

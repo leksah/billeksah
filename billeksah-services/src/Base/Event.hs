@@ -34,7 +34,6 @@ module Base.Event (
     HandlerID,
     PEvent(..),
     EventFactory(..),
-    EventSelector(..),
 
 -- * Low level interface
     stdEventFactory,
@@ -58,9 +57,6 @@ import Data.Maybe (fromJust)
 --   ---------------------------------
 --  Types
 --
-
-class Selector alpha => EventSelector alpha where
-    type BaseType alpha :: *
 
 --
 -- | A handler is a callback function
@@ -103,10 +99,12 @@ data EventFactory event handlers = EventFactory {
 --
 
 --
--- | Constructs a new event.
+-- | Constructs a new event. The plugin name has to be unique!
 --
-makeEvent :: (EventSelector alpha,ValueType alpha ~  PEvent (BaseType alpha))
-                => alpha -> StateM (ValueType alpha)
+makeEvent
+  :: (ValueType alpha ~ PEvent event, Selector alpha) =>
+     alpha
+     -> StateM (PEvent event)
 makeEvent selector = do
     ideRef           <- liftIO $ newIORef (Handlers Map.empty)
     let ef           =  stdEventFactory selector ideRef
@@ -114,7 +112,7 @@ makeEvent selector = do
     persistEvent selector ev
     return ev
 
-persistEvent :: Selector alpha =>  alpha -> ValueType alpha -> StateM ()
+persistEvent :: Selector alpha => alpha -> ValueType alpha -> StateM ()
 persistEvent key event =
      registerState  key event >> return ()
 
@@ -126,8 +124,7 @@ getEvent :: Selector alpha => alpha -> StateM (ValueType alpha)
 getEvent = getState
 
 --
--- | Registers an event handler for this event.
--- The HandlerID is for unregistering the event
+-- | Registers an event handler for this event
 --
 registerEvent :: PEvent alpha -> Handler alpha -> StateM (HandlerID)
 registerEvent event handler = do
@@ -147,14 +144,14 @@ registerEvent' event handler = do
 --
 -- | Triggers the event with the provided value
 --
-triggerEvent :: (EventSelector alpha, ValueType alpha ~  PEvent (BaseType alpha))
-                        => alpha  -> BaseType alpha  -> StateM (BaseType alpha)
+triggerEvent ::  (Selector alpha, ValueType alpha ~ PEvent event)
+    => alpha  -> event  -> StateM event
 triggerEvent sel e = getEvent sel >>= \ event -> (evtTrigger event) e
 
 --
 -- | Merge two event streams of the same type
 --
-unionEvent :: PEvent event  -> PEvent event  -> StateM (PEvent event )
+unionEvent :: PEvent event  -> PEvent event  -> StateM (PEvent event)
 unionEvent e1 e2 = do
     newEvtID <- newEventID
     return $ PEvent {
@@ -203,9 +200,8 @@ retriggerEvent event trans =
 --   ---------------------------------
 --  Low level implementation
 --
-
-stdEventFactory :: EventSelector sel =>
-    sel -> IORef (Handlers (BaseType sel)) -> EventFactory (BaseType sel) (Handlers (BaseType sel))
+stdEventFactory :: (Selector alpha, ValueType alpha ~ PEvent event) => alpha ->
+    IORef (Handlers event) -> EventFactory event (Handlers event)
 stdEventFactory _ handlersRef = EventFactory {
         efGetHandlers = liftIO $ readIORef handlersRef,
         efSetHandlers = \ nh -> liftIO $ writeIORef handlersRef nh}
@@ -215,8 +211,10 @@ newEventID = liftIO $ newUnique
 --
 -- | Make an PEvent in the IO Monad
 --
-mkEvent :: (EventSelector alpha, ValueType alpha ~  PEvent (BaseType alpha)) => alpha ->
-                EventFactory (BaseType alpha) (Handlers (BaseType alpha)) -> StateM (ValueType alpha)
+mkEvent
+  :: (Selector alpha, ValueType alpha ~ PEvent event) => alpha
+     -> EventFactory event (Handlers event)
+     -> StateM (ValueType alpha)
 mkEvent _ ef@EventFactory{efGetHandlers = getHandlers, efSetHandlers = setHandlers} = do
     newEvtID <- newEventID
     return $ PEvent {
@@ -230,7 +228,7 @@ mkEvent _ ef@EventFactory{efGetHandlers = getHandlers, efSetHandlers = setHandle
             Handlers handlerMap  <-  getHandlers
             let newHandlers =   case newEvtID `Map.lookup` handlerMap of
                                     Nothing -> handlerMap
-                                    Just l -> let newList = filter (\ (mu,_) -> mu /= unique) l
+                                    Just l -> let newList = filter (\ (mu,_) -> mu /= unique)  l
                                               in  Map.insert newEvtID newList handlerMap
             setHandlers (Handlers newHandlers)
             return (),

@@ -141,9 +141,6 @@ data FrameEventSel = FrameEventSel
 instance Selector FrameEventSel where
     type ValueType FrameEventSel = PEvent FrameEvent
 
-instance EventSelector FrameEventSel where
-    type BaseType FrameEventSel = FrameEvent
-
 --
 -- | Events the gui frame triggers
 --
