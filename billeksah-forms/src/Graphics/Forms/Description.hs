@@ -148,6 +148,7 @@ initPrefs  = do
     when hasPrefsFile $
         loadPrefs prefsPath
 
+defaultPanePrefs :: PanePrefs
 defaultPanePrefs =  PanePrefs [] [] [SplitP LeftP]
 
 panesPrefs :: FieldDescription PanePrefs
