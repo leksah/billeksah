@@ -17,12 +17,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Panes
--- Copyright   :  (c) Juergen Nicklisch-Franken, Hamish Mackenzie
--- License     :  GNU-GPL
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
--- Maintainer  :  <maintainer at leksah.org>
--- Stability   :  provisional21
--- Portability :  portable
+-- Maintainer  :  maintainer@leksah.org
+-- Stability   :  provisional
+-- Portability :  portabel
 --
 -- | The basic definitions for all panes
 --
@@ -37,8 +37,9 @@ module Graphics.Panes (
 ,   PanePath
 ,   PaneLayout(..)
 ,   PaneName
-,   Connection(..)
+,   Connection
 ,   Connections
+,   castCID
 ,   PaneInterface(..)
 
 ,   PanePrefs(..)
@@ -51,8 +52,6 @@ module Graphics.Panes (
 
 ,   postSyncState
 ,   postAsyncState
-
-,   castCID
 
 ) where
 
@@ -72,6 +71,7 @@ import Control.Monad (liftM, when)
 import qualified Data.Set as Set (member)
 import Data.IORef (newIORef)
 import Data.Version (Version(..))
+import Foreign.C (CULong)
 
 
 -- ---------------------------------------------------------------------
@@ -171,6 +171,9 @@ type Connection =  ConnectId Widget
 
 type Connections = [Connection]
 
+castCID :: GObjectClass alpha  => ConnectId alpha -> ConnectId Widget
+castCID (ConnectId ui o) = (ConnectId ui (castToWidget o))
+
 -- TODO recover somewhere, needs prefs
 
 panePathForGroup::  String -> delta PanePath
@@ -201,8 +204,7 @@ postSyncState f = reifyState (\ideR -> postGUISync (reflectState f ideR))
 postAsyncState :: StateM () -> StateM ()
 postAsyncState f = reifyState (\ideR -> postGUIAsync (reflectState f ideR))
 
-castCID :: GObjectClass alpha  => ConnectId alpha -> ConnectId Widget
-castCID (ConnectId ui o) = (ConnectId ui (castToWidget o))
+
 
 --  ----------------------------------------
 -- * Necessary with pre 10.1 verion of gtk2hs
@@ -225,4 +227,5 @@ instance Eq Widget
                     in pa == pb
 #endif
 #endif
+
 

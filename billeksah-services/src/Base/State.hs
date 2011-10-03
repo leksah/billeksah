@@ -4,14 +4,15 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Base.State
--- Copyright   :  Juergen "jutaro" Nicklisch-Franken
--- License     :  GPL Nothing
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
 -- Maintainer  :  maintainer@leksah.org
--- Stability   :
--- Portability :
+-- Stability   :  provisional
+-- Portability :  portabel
 --
--- |
+-- | A simple state service.
+-- A state has to br registered with an initial value, before it can be used.
 --
 -----------------------------------------------------------------------------
 

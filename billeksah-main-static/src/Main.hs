@@ -3,12 +3,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Main
--- Copyright   :
--- License     :  AllRightsReserved
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
--- Maintainer  :
--- Stability   :
--- Portability :
+-- Maintainer  :  maintainer@leksah.org
+-- Stability   :  provisional
+-- Portability :  portabel
 --
 -- | This starts up the plug in shell, and next the app
 --

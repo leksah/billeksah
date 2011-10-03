@@ -2,12 +2,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Base.MyMissing
--- Copyright   :  (c) Juergen Nicklisch-Franken, Hamish Mackenzie
--- License     :  GNU-GPL
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
--- Maintainer  :  Juergen Nicklisch-Franken <info@leksah.org>
+-- Maintainer  :  maintainer@leksah.org
 -- Stability   :  provisional
--- Portability :  portable
+-- Portability :  portabel
 --
 -- | Module for missing base functions
 --

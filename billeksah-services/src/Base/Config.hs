@@ -1,12 +1,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Base.Config
--- Copyright   :  Juergen "jutaro" Nicklisch-Franken
--- License     :  GPL Nothing
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
 -- Maintainer  :  maintainer@leksah.org
--- Stability   :
--- Portability :
+-- Stability   :  provisional
+-- Portability :  portabel
 --
 -- | Plugin Configurations
 --

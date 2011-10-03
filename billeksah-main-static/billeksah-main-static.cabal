@@ -2,7 +2,7 @@ name: billeksah-main-static
 version: 1.0.0
 cabal-version: >= 1.8
 build-type: Simple
-license: GPL
+license: LGPL
 license-file: LICENSE
 copyright: Juergen "jutaro" Nicklisch-Franken
 maintainer: maintainer@leksah.org

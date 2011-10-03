@@ -3,12 +3,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Menu
--- Copyright   :
--- License     :  AllRightsReserved
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
--- Maintainer  :
--- Stability   :
--- Portability :
+-- Maintainer  :  maintainer@leksah.org
+-- Stability   :  provisional
+-- Portability :  portabel
 --
 -- | Menu services
 --

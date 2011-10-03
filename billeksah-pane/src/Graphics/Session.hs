@@ -3,12 +3,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Session
--- Copyright   :  (c) Juergen Nicklisch-Franken
--- License     :  GNU-GPL
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
--- Maintainer  :  <maintainer at leksah.org>
+-- Maintainer  :  maintainer@leksah.org
 -- Stability   :  provisional
--- Portability :  portable
+-- Portability :  portabel
 --
 --
 -- | Module for saving and recovering the layout

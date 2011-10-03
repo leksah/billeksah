@@ -4,12 +4,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Base.Event
--- Copyright   :  Juergen "jutaro" Nicklisch-Franken
--- License     :  GPL Nothing
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
 -- Maintainer  :  maintainer@leksah.org
--- Stability   :
--- Portability :
+-- Stability   :  provisional
+-- Portability :  portabel
 --
 -- | Simple (imperative) event implementation
 --  For concrete usage an event factory has to be constructed.
@@ -103,8 +103,7 @@ data EventFactory event handlers = EventFactory {
 --
 makeEvent
   :: (ValueType alpha ~ EventChannel event, Selector alpha) =>
-     alpha
-     -> StateM (EventChannel event)
+    alpha -> StateM (EventChannel event)
 makeEvent selector = do
     ideRef           <- liftIO $ newIORef (Handlers Map.empty)
     let ef           =  stdEventFactory selector ideRef

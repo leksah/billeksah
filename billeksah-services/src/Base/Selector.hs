@@ -4,14 +4,15 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Base.Selector
--- Copyright   :  Juergen "jutaro" Nicklisch-Franken
--- License     :  GPL Nothing
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
 -- Maintainer  :  maintainer@leksah.org
--- Stability   :
--- Portability :
+-- Stability   :  provisional
+-- Portability :  portabel
 --
--- |
+-- | A Selector is a unique think, which has an attached type for values.
+-- It's String representation is not necessary unique!
 --
 -----------------------------------------------------------------------------
 

@@ -2,11 +2,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Statusbar
--- Copyright   :  Jürgen (jutaro) Nicklisch-Franken
--- License     :  GPL
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
 -- Maintainer  :  maintainer@leksah.org
---
+-- Stability   :  provisional
+-- Portability :  portabel
 -- | Statusbar services
 --
 -----------------------------------------------------------------------------

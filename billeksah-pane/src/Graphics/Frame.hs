@@ -12,12 +12,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.Frame
--- Copyright   :  (c) Juergen Nicklisch-Franken, Hamish Mackenzie
--- License     :  GNU-GPL
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
 --
--- Maintainer  :  <maintainer at leksah.org>
+-- Maintainer  :  maintainer@leksah.org
 -- Stability   :  provisional
--- Portability :  portable
+-- Portability :  portabel
 --
 --
 -- | Splittable panes containing notebooks with any widgets

@@ -2,12 +2,15 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Base.ConfigFile
--- Copyright   :  (c) Juergen Nicklisch-Franken
--- License     :  GNU-GPL
--- Maintainer  :  <maintainer at leksah.org>
+-- Copyright   :  Juergen Nicklisch-Franken
+-- License     :  LGPL
+--
+-- Maintainer  :  maintainer@leksah.org
+-- Stability   :  provisional
+-- Portability :  portabel
 --
 -- | Module for saving and restoring preferences and settings
--- ina way similiar to what you would find in Microsoft Windows INI files.
+-- in way similiar to what you would find in Microsoft Windows INI files.
 --
 -- The configuration file may consists of sections,
 -- led by a [section] header and followed by name: value entries
