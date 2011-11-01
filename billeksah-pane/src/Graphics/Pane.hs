@@ -67,8 +67,8 @@ frameInit2 :: BaseEvent -> EventChannel FrameEvent -> StateM ()
 frameInit2 baseEvent myEvent = do
     message Debug ("init2 " ++ panePluginName)
     uiManager <- reifyState (\stateR -> do
---        res <- unsafeInitGUIForThreadedRTS
-        res <- initGUI
+        res <- unsafeInitGUIForThreadedRTS
+--        res <- initGUI
         messageR Debug ("initGUI " ++ show res) stateR
         uiManagerNew)
     liftIO $ initGtkRc

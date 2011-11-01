@@ -35,7 +35,7 @@ import Base.Preferences (savePrefs, setPrefs)
 openPreferencesPane ::  StateM ()
 openPreferencesPane = do
     message Debug "Open preferences pane"
-    _mbPane :: Maybe PreferencesPane <- getOrBuildDisplay (Left []) True
+    _mbPane :: Maybe PreferencesPane <- getOrBuildDisplay (Left []) True ()
     return ()
 
 -- ----------------------------------------------
@@ -45,13 +45,15 @@ openPreferencesPane = do
 data PreferencesPane = PreferencesPane {
     prpTopW             :: VBox,
     prpInj              :: Injector [GenValue],
-    prpExt              :: Extractor [GenValue]
+    prpExt              :: Extractor [GenValue],
+    prpEvent            :: GEvent
 } deriving Typeable
 
 
 instance PaneInterface PreferencesPane where
     data PaneState PreferencesPane =  PrefPaneState
             deriving(Read,Show)
+    type PaneArgs PreferencesPane =  ()
 
     getTopWidget    =  \ p   -> castToWidget (prpTopW p)
     primPaneName    =  \ _dp  -> "PreferencesPane"
@@ -59,7 +61,7 @@ instance PaneInterface PreferencesPane where
     saveState       =  \ _s   -> return $ Just PrefPaneState
     recoverState    =  \ pp _ps -> do
         nb      <-  getNotebook pp
-        mbP     <-  buildPane pp nb builder
+        mbP     <-  buildPanePrim pp nb (builder ())
         return mbP
     builder         =  buildPreferencesPane
 
@@ -70,9 +72,9 @@ instance Pane PreferencesPane
 -- ----------------------------------------------
 -- * Building the pane in standard form
 --
-buildPreferencesPane :: PanePath -> Notebook -> Window
+buildPreferencesPane :: () -> PanePath -> Notebook -> Window
                             -> StateM (Maybe PreferencesPane, Connections)
-buildPreferencesPane = \ pp nb window -> do
+buildPreferencesPane _ pp nb window = do
 
     allPrefs <-  getState PrefsDescrState
     let descrs = map (\ (s,GenF fdg v) -> (s,GenFG (toFieldDescriptionG fdg) v))
@@ -81,7 +83,7 @@ buildPreferencesPane = \ pp nb window -> do
   where
     formPaneDescr categories =
         FormPaneDescr {
-            fpGetPane      = \ top inj ext -> PreferencesPane top inj ext,
+            fpGetPane      = \ top inj ext gevent -> PreferencesPane top inj ext gevent,
             fpSaveAction   = \ v -> do
                 mapM (\ (str,GenV val) -> setPrefs str val) (zip categories v)
                 currentPrefsPath <- getCurrentPrefsPath

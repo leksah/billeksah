@@ -66,6 +66,7 @@ module Graphics.Frame (
 ,   allGroupNames
 ,   closeGroup
 ,   GenPane(..)
+,   getPanes
 
     -- * Accesing state
 ,   initialFrameState
@@ -153,6 +154,7 @@ data FrameEvent =
     | RegisterPane [(String, GenPane)]
     | RegisterSessionExt [GenSessionExtension]
     | RegisterStatusbarComp [CompDescr]
+    | AboutToQuit Bool
 
 makeFrameEvent :: StateM(EventChannel FrameEvent)
 makeFrameEvent = makeEvent FrameEventSel
@@ -204,7 +206,7 @@ initialFrameState uim = FrameState {
 ,   fsStatusbar       =   (Map.empty,Nothing)}
 
 
-data GenPane        =   forall alpha . Pane alpha  => PaneC alpha
+data GenPane        =   forall alpha beta . Pane alpha  => PaneC alpha
 
 instance Eq GenPane where
     (==) (PaneC x) (PaneC y) = paneName x == paneName y
@@ -276,7 +278,9 @@ getFrameState      = getState FrameStateSel
 
 -- | Quit ide -- TODO
 quit :: StateAction
-quit = liftIO mainQuit
+quit = do
+    AboutToQuit shallQuit <- triggerFrameEvent (AboutToQuit True)
+    when shallQuit (liftIO mainQuit)
 
 --  ----------------------------------------
 --  * The main interface to the frame system
@@ -342,17 +346,17 @@ class PaneInterface alpha => Pane alpha where
             then return Nothing
             else (return (Just $ head selectedPanes))
 
-    forceGetPane    ::  Either PanePath String  -> StateM alpha
+    forceGetPane    ::  Either PanePath String  -> PaneArgs alpha -> StateM alpha
     -- ^get a pane of this type, if not one is open panic
-    forceGetPane pp =   do  mbPane <- getOrBuildPane pp
-                            case mbPane of
-                                Nothing -> error "Can't get pane "
-                                Just p -> return p
+    forceGetPane pp arg =   do  mbPane <- getOrBuildPane pp arg
+                                case mbPane of
+                                    Nothing -> error "Can't get pane "
+                                    Just p -> return p
 
-    getOrBuildPane  ::  Either PanePath String -> StateM (Maybe alpha)
+    getOrBuildPane  ::  Either PanePath String -> PaneArgs alpha -> StateM (Maybe alpha)
     -- ^get a pane of this type, if one is open, or build one and for this specify either
     -- a pane path to put it, or a group name, from which a pane path may be derived
-    getOrBuildPane ePpoPid =  do
+    getOrBuildPane ePpoPid arg =  do
         mbPane <- getPane
         case mbPane of
             Nothing -> do
@@ -362,8 +366,19 @@ class PaneInterface alpha => Pane alpha where
                                         layout      <- getLayoutSt
                                         return (getBestPanePath ppp layout)
                 nb          <-  getNotebook pp
-                buildPane pp nb builder
+                buildPanePrim pp nb (builder arg)
             Just pane ->   return (Just pane)
+
+    buildPane  ::  Either PanePath String -> PaneArgs alpha -> StateM (Maybe alpha)
+    -- ^build a pane of this specific type
+    buildPane ePpoPid arg =  do
+        pp          <-  case ePpoPid of
+                            Right pId  -> getBestPathForId pId
+                            Left ppp -> do
+                                layout      <- getLayoutSt
+                                return (getBestPanePath ppp layout)
+        nb          <-  getNotebook pp
+        buildPanePrim pp nb (builder arg)
 
 
     displayPane     ::  alpha -> Bool -> StateM ()
@@ -373,21 +388,21 @@ class PaneInterface alpha => Pane alpha where
         when shallGrabFocus $ liftIO $ widgetGrabFocus $ getTopWidget pane
 
 
-    getOrBuildDisplay :: Either PanePath String -> Bool  -> StateM (Maybe alpha)
+    getOrBuildDisplay :: Either PanePath String -> Bool  -> PaneArgs alpha  -> StateM (Maybe alpha)
     -- ^ is a concatination of getOrBuildPane and displayPane
-    getOrBuildDisplay pps b = do
-        mbP <- getOrBuildPane pps
+    getOrBuildDisplay pps b arg = do
+        mbP <- getOrBuildPane pps arg
         case mbP of
             Nothing -> return Nothing
             Just p  -> do
                 displayPane p b
                 return (Just p)
 
-    buildPane       ::  PanePath ->
+    buildPanePrim       ::  PanePath ->
                         Notebook ->
                         (PanePath -> Notebook -> Window -> StateM (Maybe alpha,Connections)) ->
                         StateM (Maybe alpha)
-    buildPane panePath notebook builder = do
+    buildPanePrim panePath notebook builder = do
         windows       <-  getWindowsSt
 
         (mbBuf,cids)  <-  builder panePath notebook (head windows)
