@@ -48,19 +48,29 @@ import qualified Graphics.UI.Gtk as Gtk (Button)
 -- | A Column decsription describes the colums for a table editor.
 -- This is an example:
 --        (ColumnsDescr True [
+-- a simple column without editing
+--            ColumnDescr{
+--                tcdLabel = "Plugin",
+--                tcdRenderer = cellRendererTextNew,
+--                tcdRenderFunc = \ (pluginName',(_,_)) -> [cellText := pluginName'],
+--                tcdMbEditFunc = Nothing},
+-- with an editing function
 --            ColumnDescr{
 --                tcdLabel = "Lower",
 --                tcdRenderer = cellRendererTextNew,
 --                tcdRenderFunc = \ (_,(lower,_)) -> [cellText := showMbVersion lower],
--- The tricky part is the edit function:
---                tcdMbEditFunc = Just (\ renderer listStore -> do
+--                tcdMbEditFunc = Just (\ renderer listStore notifier stateR -> do
+--                                        set renderer [cellTextEditable := True]
 --                                        on renderer edited (\ (p:_) str ->  do
 --                                            row@(pn,(lower,upper)) <- listStoreGetValue listStore p
 --                                            let newRow = case parse boundParser "" str of
 --                                                            Left _  ->  row
 --                                                            Right v ->  (pn,(v,upper))
---                                            listStoreSetValue listStore p newRow)
---                                        return ())}])
+--                                            listStoreSetValue listStore p newRow
+    --                                        reflectState (triggerGUIEvent notifier
+    --                                            dummyGUIEvent {geSelector = MayHaveChanged}) stateR)
+--                                        return ())},
+
 
 data ColumnsDescr alpha = ColumnsDescr {
     tcsdShowHeaders :: Bool,
@@ -75,7 +85,7 @@ data ColumnDescr alpha = forall beta . CellRendererClass beta => ColumnDescr {
     -- ^ construct the renderer used for this column
     tcdRenderFunc :: alpha -> [AttrOp beta],
     -- ^ the function to render the contest
-    tcdMbEditFunc :: Maybe (beta -> ListStore alpha -> IO ())}
+    tcdMbEditFunc :: Maybe (beta -> ListStore alpha -> GEvent -> StateRef -> IO ())}
     -- ^ maybe a function, to edit the contest
 
 --
@@ -110,7 +120,7 @@ tableEditor ColumnsDescr {tcsdShowHeaders = showHeaders, tcsdColums = columns} p
                             renderer <- rend
                             case mbEdit of
                                 Nothing -> return ()
-                                Just func -> func renderer listStore
+                                Just func -> func renderer listStore notifier stateR
                             cellLayoutPackStart col renderer True
                             cellLayoutSetAttributes col renderer listStore renderFunc
                                 ) columns
@@ -217,7 +227,7 @@ selectionEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns
                             case mbFunc of
                                 Nothing -> return ()
                                 Just efunc -> do
-                                    efunc renderer listStoreSelected
+                                    efunc renderer listStoreSelected notifier stateR
                                     return ()
                             cellLayoutPackStart col renderer True
                             cellLayoutSetAttributes col renderer listStoreSelected func
@@ -334,7 +344,7 @@ selectionEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns
                             mbVal <- case rows of
                                         ([i]:_) -> liftM (Just . GenSelection)
                                             (listStoreGetValue listStore i)
-                                        otherwise -> return Nothing
+                                        _ -> return Nothing
 
                             reflectState (triggerGUIEvent notifier (dummyGUIEvent {
                                 geSelector = Selection,
@@ -342,7 +352,7 @@ selectionEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns
                                 geMbSelection = mbVal,
                                 geGtkReturn = True})) stateR
                             return False
-                    otherwise -> return False)
+                    _ -> return False)
 
 --
 -- | An editor with a subeditor, of which a list of items can be selected
