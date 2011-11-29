@@ -23,6 +23,9 @@ import Graphics.Forms.Basics
 import Graphics.Forms.Parameters
 import Graphics.Forms.Build
 import Graphics.Forms.GUIEvent
+import Graphics.Forms.Composite (pairEditor)
+import Graphics.Forms.Simple (genericEditor, stringEditor)
+import Graphics.Forms.Sets
 import Graphics.Pane
 import Base
 
@@ -32,9 +35,6 @@ import qualified Text.ParserCombinators.Parsec as P
 import Data.Version (Version(..))
 import qualified Data.Map as Map (empty)
 import Base.Preferences (loadPrefs, validatePrefs)
-import Graphics.Forms.Composite
-       (pairEditor, ColumnDescr(..), multisetEditor)
-import Graphics.Forms.Simple (genericEditor, stringEditor)
 import Data.List (sortBy)
 import Graphics.Panes.Preferences
        (PreferencesPane, openPreferencesPane)
@@ -165,9 +165,17 @@ panesPrefs =
             (\ a -> ppCategoryForPane a)
             (\ b a -> a{ppCategoryForPane = b})
             (multisetEditor
-                (ColumnDescr True [("Pane Id",\(n,_) -> [cellText := n], Nothing)
-                                   ,("Pane Category",\(_,v) -> [cellText := v],
-                                        Nothing)])
+                (ColumnsDescr True [
+                    ColumnDescr{
+                        tcdLabel = "Pane Id",
+                        tcdRenderer = cellRendererTextNew,
+                        tcdRenderFunc = \(n,_) -> [cellText := n],
+                        tcdMbEditFunc = Nothing},
+                    ColumnDescr{
+                        tcdLabel = "Pane category",
+                        tcdRenderer = cellRendererTextNew,
+                        tcdRenderFunc = \(_,v) -> [cellText := v],
+                        tcdMbEditFunc = Nothing}])
                 ((pairEditor
                     (stringEditor (\s -> not (null s)) True,defaultParams)
                     (stringEditor (\s -> not (null s)) True,defaultParams)),defaultParams)
@@ -185,10 +193,17 @@ panesPrefs =
             ppPathForCategory
             (\b a -> a{ppPathForCategory = b})
             (multisetEditor
-                (ColumnDescr True [("Pane category",\(n,_) -> [cellText := n],
-                                    Nothing)
-                                   ,("Pane path",\(_,v) -> [cellText := show v],
-                                     Nothing)])
+                (ColumnsDescr True [
+                    ColumnDescr{
+                        tcdLabel = "Pane category",
+                        tcdRenderer = cellRendererTextNew,
+                        tcdRenderFunc = \(n,_) -> [cellText := n],
+                        tcdMbEditFunc = Nothing},
+                    ColumnDescr{
+                        tcdLabel = "Pane path",
+                        tcdRenderer = cellRendererTextNew,
+                        tcdRenderFunc = \(_,v) -> [cellText := show v],
+                        tcdMbEditFunc = Nothing}])
                 ((pairEditor
                     (stringEditor (\s -> not (null s)) True,defaultParams)
                     (genericEditor,defaultParams)),defaultParams)

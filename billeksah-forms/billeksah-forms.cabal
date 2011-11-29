@@ -21,6 +21,7 @@ Library
         Graphics.Forms.Basics
         Graphics.Forms.Build
         Graphics.Forms.Composite
+        Graphics.Forms.Sets
         Graphics.Forms.Default
         Graphics.Forms.Description
         Graphics.Forms.GUIEvent

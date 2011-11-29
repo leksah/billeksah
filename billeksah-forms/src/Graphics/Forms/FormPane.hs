@@ -16,7 +16,9 @@
 module Graphics.Forms.FormPane (
     FormPaneDescr(..),
     buildFormsPane,
-    buildGenericFormsPane
+    buildGenericFormsPane,
+    SimpleFormPaneDescr(..),
+    buildSimpleFormsPane,
 ) where
 
 import Base
@@ -36,8 +38,12 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Control.Monad (when)
 
+
+-- | A description for a forms pane, which is targeted as an editor,
+-- with save and cancel buttons
+
 data FormPaneDescr alpha beta  =  FormPaneDescr {
-    fpGetPane      :: Pane beta  => VBox -> Injector alpha -> Extractor alpha -> beta, -- ^ Construct the pane data type
+    fpGetPane      :: Pane beta  => VBox -> Injector alpha -> Extractor alpha -> GEvent -> beta , -- ^ Construct the pane data type
     fpSaveAction   :: alpha -> StateM (),                                   -- ^ Called when the save button is hit
     fpHasChanged   :: alpha -> alpha -> Bool,                                   -- ^ Judge if this qualify as a change
     fpGuiHandlers  :: [([GUIEventSelector],Handler GUIEvent)],          -- ^ Handle GUI Events triggered
@@ -59,6 +65,20 @@ buildGenericFormsPane :: Pane beta  => [(String,GenFieldDescriptionG)]  -> FormP
 buildGenericFormsPane descr formDescr =
     buildFormsPanePrim descr (buildGenericEditor descr) formDescr
         (map (\ (_s,GenFG _ v) -> GenV v) descr)
+
+-- | A description for a forms pane, which has no standard buttons and no change detection
+
+data SimpleFormPaneDescr alpha beta  =  SimpleFormPaneDescr {
+    sfpGetPane      :: Pane beta  => ScrolledWindow -> Injector alpha -> Extractor alpha -> GEvent -> beta}
+            -- ^ Construct the pane data type
+
+--
+-- | Returns a builder for a pane
+-- Requires a forms description, an initial value and a FormPaneDescr
+buildSimpleFormsPane :: Pane beta  => FieldDescriptionG alpha  ->  alpha  -> SimpleFormPaneDescr alpha beta
+                        -> (PanePath -> Notebook -> Window -> StateM (Maybe beta, Connections))
+buildSimpleFormsPane descr val formDescr =
+    buildSimpleFormsPanePrim descr (buildEditor descr val) formDescr val
 
 
 buildFormsPanePrim
@@ -115,7 +135,7 @@ buildFormsPanePrim _descr editor formDescr val = \ _panePath _notebook window ->
                     liftIO $ writeIORef lastSaved b
                     inj b)
 
-        let pane  = (fpGetPane formDescr) vb inj2 (ext val)
+        let pane  = (fpGetPane formDescr) vb inj2 (ext val) notifier
 
         --Events
         cid1 <- saveB `onClicked` (do
@@ -182,3 +202,31 @@ buildFormsPanePrim _descr editor formDescr val = \ _panePath _notebook window ->
                     Just p -> (not ((fpHasChanged formDescr) p old), True)
 
 
+buildSimpleFormsPanePrim
+  :: (WidgetClass child, Pane a) =>
+     t
+     -> StateM
+          (child,
+           Injector alpha,
+           alpha -> Extractor alpha,
+           GEvent)
+     -> SimpleFormPaneDescr alpha a
+     -> alpha
+     -> t1
+     -> t2
+     -> Window
+     -> StateM (Maybe a, [ConnectId Widget])
+buildSimpleFormsPanePrim _descr editor formDescr val = \ _panePath _notebook _ -> do
+    reifyState (\ stateR -> do
+        ------------------------------------------
+        (widget,inj,ext,notifier) <- reflectState editor stateR
+        sw <- scrolledWindowNew Nothing Nothing
+        scrolledWindowAddWithViewport sw widget
+        scrolledWindowSetPolicy sw PolicyAutomatic PolicyAutomatic
+
+        --Frame
+
+        let pane  = (sfpGetPane formDescr) sw inj (ext val) notifier
+
+        return (Just pane,[]))
+  where

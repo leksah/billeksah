@@ -16,6 +16,7 @@ module Graphics.Forms (
     module Graphics.Forms.Basics,
     module Graphics.Forms.Build,
     module Graphics.Forms.Composite,
+    module Graphics.Forms.Sets,
     module Graphics.Forms.Default,
     module Graphics.Forms.Description,
     module Graphics.Forms.GUIEvent,
@@ -30,6 +31,7 @@ module Graphics.Forms (
 import Graphics.Forms.Basics
 import Graphics.Forms.Build
 import Graphics.Forms.Composite
+import Graphics.Forms.Sets
 import Graphics.Forms.Default
 import Graphics.Forms.Description
 import Graphics.Forms.GUIEvent

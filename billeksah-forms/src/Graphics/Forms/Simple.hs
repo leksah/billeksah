@@ -18,6 +18,8 @@ module Graphics.Forms.Simple (
 ,   boolEditor
 ,   boolEditor2
 ,   buttonEditor
+,   dummyGetter
+,   dummySetter
 ,   enumEditor
 ,   clickEditor
 ,   stringEditor
@@ -201,32 +203,7 @@ enumEditor labels parameters notifier = do
         (("Name", ParaString "") <<< parameters)
         notifier
 
--- | An Editor for nothing (which may report a click) in the form of a button
---
-clickEditor :: Bool -> Editor ()
-clickEditor canDefault parameters notifier = do
-    coreRef <- liftIO $ newIORef Nothing
-    mkEditor
-        (\widget _ -> reifyState $ \ stateR -> do
-            core <- readIORef coreRef
-            case core of
-                Nothing  -> do
-                    button <- case getPara "StockId" parameters of
-                        ParaString "" ->   buttonNewWithLabel (getParaS "Name" parameters)
-                        ParaString st ->   buttonNewFromStock st
-                        _             -> error "Simnple>>clickEditor: Impossible type"
-                    widgetSetName button (getParaS "Name" parameters)
-                    containerAdd widget button
-                    reflectState(
-                        activateGUIEvent (castToWidget button) notifier Clicked) stateR
-                    writeIORef coreRef (Just button)
-                    when canDefault $ do
-                        set button [widgetCanDefault := True]
-                        widgetGrabDefault button
-                Just _ -> return ())
-        (return (Just ()))
-        (("Name",ParaString "") <<< parameters)
-        notifier
+
 
 -- | An Editor to display an image
 --
@@ -401,6 +378,43 @@ buttonEditor parameters notifier = do
         parameters
         notifier
 
+-- | Since this editor has no value attached, here are dummy getters and setters for it
+dummyGetter :: alpha -> ()
+dummyGetter = \ _ -> ()
+dummySetter :: alpha -> beta -> beta
+dummySetter = \ _ b -> b
+
+-- | An Editor for nothing (which may report a click) in the form of a button
+-- The editor state reflects the sensitivity state of the button
+clickEditor :: Bool -> Editor Bool
+clickEditor canDefault parameters notifier = do
+    coreRef <- liftIO $ newIORef Nothing
+    mkEditor
+        (\widget sens -> reifyState $ \ stateR -> do
+            core <- readIORef coreRef
+            case core of
+                Nothing  -> do
+                    button <- case getPara "StockId" parameters of
+                        ParaString "" ->   buttonNewWithLabel (getParaS "Name" parameters)
+                        ParaString st ->   buttonNewFromStock st
+                        _             -> error "Simnple>>clickEditor: Impossible type"
+                    widgetSetName button (getParaS "Name" parameters)
+                    containerAdd widget button
+                    reflectState(
+                        activateGUIEvent (castToWidget button) notifier Clicked) stateR
+                    writeIORef coreRef (Just button)
+                    widgetSetSensitive widget sens
+                    when canDefault $ do
+                        set button [widgetCanDefault := True]
+                        widgetGrabDefault button
+                Just widget -> widgetSetSensitive widget sens)
+        (liftIO $ do
+            core <- readIORef coreRef
+            case core of
+                Nothing -> return Nothing
+                Just button -> liftM Just (get button widgetSensitive))
+        (("Name",ParaString "") <<< parameters)
+        notifier
 --
 -- | Editor for the selection of some element from a static list of elements in the
 -- | form of a combo box

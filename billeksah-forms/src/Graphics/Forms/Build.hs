@@ -292,6 +292,8 @@ mkEditor injectorC extractor parameters _ = liftIO $ do
     widgetSetSizeRequest outerAlig x y
     let name  =  getParaS "Name" parameters
     widgetSetName outerAlig name
+    let ParaBool sens  =  getPara "Sensitivity" parameters
+    widgetSetSensitivity innerAlig sens
     let build = injectorC (castToContainer innerAlig)
     return (castToWidget outerAlig, build, extractor)
 

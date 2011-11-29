@@ -142,6 +142,7 @@ data PanePrefs = PanePrefs {
 class (Typeable alpha, Show (PaneState alpha), Read (PaneState alpha)) => PaneInterface alpha where
 
     data PaneState alpha :: *
+    type PaneArgs  alpha :: *
 
     primPaneName    ::   alpha -> String
     -- ^ gets a string which names this pane
@@ -150,7 +151,7 @@ class (Typeable alpha, Show (PaneState alpha), Read (PaneState alpha)) => PaneIn
     paneType          :: alpha -> String
     -- ^ gets a unique id for this type of pane
 
-    builder         ::   PanePath -> Notebook -> Window -> StateM (Maybe alpha,Connections)
+    builder         ::   PaneArgs alpha -> PanePath -> Notebook -> Window -> StateM (Maybe alpha,Connections)
     -- ^ A function, which builds this pane
 
     getTopWidget    ::   alpha -> Widget
@@ -161,6 +162,8 @@ class (Typeable alpha, Show (PaneState alpha), Read (PaneState alpha)) => PaneIn
 
     recoverState    ::   PanePath -> PaneState alpha -> StateM (Maybe alpha)
     -- ^ Sets the state for this pane
+
+
 
 
 

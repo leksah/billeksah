@@ -104,6 +104,7 @@ defaultParams =
     [   Para "Name"            (ParaString "")
     ,   Para "StockId"         (ParaString "")
     ,   Para "Synopsis"        (ParaString "")
+    ,   Para "Sensitivity"     (ParaBool True)
 -- For boxes
     ,   Para "VBoxHomogeneous" (ParaBool False)
     ,   Para "HBoxHomogeneous" (ParaBool True)
