@@ -161,8 +161,9 @@ frameCompartments = [
 --
 -- | Opens up the main window, with menu, toolbar, accelerators
 --
-startupFrame :: String -> (Window -> VBox -> Notebook -> StateAction) -> StateAction
-startupFrame windowName beforeMainGUI = do
+startupFrame :: String -> (Window -> VBox -> Notebook -> StateAction) ->
+    (Window -> VBox -> Notebook -> StateAction) -> StateAction
+startupFrame windowName beforeWindowOpen beforeMainGUI = do
     message Debug "startupFrame"
     --    osxApp <- OSX.applicationNew
     uiManager <- getUiManagerSt
@@ -205,9 +206,14 @@ startupFrame windowName beforeMainGUI = do
 
         boxPackEnd vb statusbar PackNatural 0
 
-        widgetShowAll win
+        reflectState (beforeWindowOpen win vb nb) stateR
         timeoutAddFull (yield >> return True) priorityDefaultIdle 100 -- maybe switch back to
-        reflectState (beforeMainGUI win vb nb) stateR
+
+        widgetShowAll win
+        reflectState (do
+            toolbarIsVisible <- toolbarVisible
+            showToolbar toolbarIsVisible
+            beforeMainGUI win vb nb) stateR
 
         mainGUI
         return ()
