@@ -6,7 +6,7 @@ license: LGPL
 license-file: LICENSE
 copyright: Juergen "jutaro" Nicklisch-Franken
 maintainer: maintainer@leksah.org
-homepage: http://www.leksah.org>
+homepage: http://www.leksah.org
 package-url: https://github.com/leksah
 bug-reports: http://code.google.com/p/leksah/issues/list
 synopsis: Leksah plugin base
