@@ -68,8 +68,8 @@ frameInit2 baseEvent myEvent = do
     message Debug ("init2 " ++ panePluginName)
     uiManager <- reifyState (\stateR -> do
         res <- unsafeInitGUIForThreadedRTS
---        res <- initGUI
-        messageR Debug ("initGUI " ++ show res) stateR
+        timeoutAddFull (yield >> return True) priorityHigh 100
+        messageR Debug ("unsafeInitGUIForThreadedRTS* " ++ show res) stateR
         uiManagerNew)
     liftIO $ initGtkRc
     res <- registerFrameState (initialFrameState uiManager)
@@ -207,7 +207,6 @@ startupFrame windowName beforeWindowOpen beforeMainGUI = do
         boxPackEnd vb statusbar PackNatural 0
 
         reflectState (beforeWindowOpen win vb nb) stateR
-        timeoutAddFull (yield >> return True) priorityDefaultIdle 100 -- maybe switch back to
 
         widgetShowAll win
         reflectState (do

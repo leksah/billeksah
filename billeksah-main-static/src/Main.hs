@@ -43,6 +43,7 @@ import Control.Monad (when)
 import Data.Version (showVersion)
 import System.Exit (exitSuccess)
 import Paths_billeksah_main_static
+import System.IO (stdout, hFlush)
 
 pluginTable :: Map String GenInterfaceM
 pluginTable = Map.fromList [
@@ -110,7 +111,9 @@ main = do
         registerMessageLevel verbosity'
         baseEvent    <- makeEvent BaseEventSel
         registerEvent'  baseEvent (\ e -> case e of
-                                            BaseLog level str -> liftIO $ putStrLn (show level ++ " " ++ str)
+                                            BaseLog level str -> do
+                                                liftIO $ putStrLn (show level ++ " " ++ str)
+                                                liftIO $ hFlush stdout
                                             otherwise -> return ())
         res <- registerCurrentConfigPath pluginCPath
         case res of

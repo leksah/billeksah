@@ -36,6 +36,7 @@ import Data.Version (showVersion)
 import Paths_billeksah_main (version)
 import System.Exit (exitSuccess)
 import Data.Foldable (find)
+import System.IO (stdout, hFlush)
 
 data Flag =    Help
              | Version
@@ -93,7 +94,9 @@ main = do
         baseEvent    <- makeEvent BaseEventSel
         registerEvent' baseEvent (\ e ->
             case e of
-                BaseLog level str -> liftIO $ putStrLn (show level ++ " " ++ str)
+                BaseLog level str -> do
+                    liftIO $ putStrLn (show level ++ " " ++ str)
+                    liftIO $ hFlush stdout
                 otherwise     -> return ())
         res <- registerCurrentConfigPath pluginCPath
         case res of
