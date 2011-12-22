@@ -323,7 +323,15 @@ intEditor (min, max, step) parameters notifier = do
                                     h (Gtk.Event True)
                                     return ())
                                 return (unsafeCoerce res))
-                                MayHaveChanged) stateR
+                                MayHaveChanged
+                        activateGUIEvent' (castToWidget spin) notifier
+                            (\ w h -> do
+                                res     <-  afterInput (castToSpinButton w) (do
+                                    h (Gtk.Event True)
+                                    liftM Just $ spinButtonGetValue (castToSpinButton w))
+                                return (unsafeCoerce res))
+                                MayHaveChanged
+                                    ) stateR
                     containerAdd widget spin
                     spinButtonSetValue spin (fromIntegral v)
                     writeIORef coreRef (Just spin)

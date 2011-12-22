@@ -26,7 +26,6 @@ module Graphics.Menu (
 )where
 
 import Base
-import Graphics.FrameTypes
 import Graphics.Frame
 import Graphics.Panes
 import Graphics.Statusbar
@@ -398,9 +397,9 @@ toolbarVisible = do
 --
 setSensitivity :: Selector s => [(s, Bool)] -> StateM ()
 setSensitivity l = do
-    message Debug ("setSensitivity " ++ show l)
+--    message Debug ("setSensitivity " ++ show l)
     mapM_ setSensitivitySingle l
-    message Debug ("after setSensitivity" ++ show l)
+--    message Debug ("after setSensitivity" ++ show l)
   where
     setSensitivitySingle (sens,bool) = do
         actions <- getActionsFor sens

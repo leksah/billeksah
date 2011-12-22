@@ -34,7 +34,7 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.ParserCombinators.Parsec as P
 import Data.Version (Version(..))
 import qualified Data.Map as Map (empty)
-import Base.Preferences (loadPrefs, validatePrefs)
+import Base.Preferences (getPrefs, loadPrefs, validatePrefs)
 import Data.List (sortBy)
 import Graphics.Panes.Preferences
        (PreferencesPane, openPreferencesPane)
@@ -73,7 +73,19 @@ formsInit2 _baseEvent _myEvent = do
     registerFrameEvent handler >> return ()
   where handler (RegisterActions actions) = return $ RegisterActions $ actions ++ myActions
         handler (RegisterPane paneTypes)  = return $ RegisterPane $ paneTypes ++ myPaneTypes
+        handler (PanePathForGroup str _) = do
+            path <-  panePathForGroup str
+            return $ PanePathForGroup str path
         handler e                         = return e
+
+panePathForGroup :: String -> StateM PanePath
+panePathForGroup id = do
+    prefs <- getPrefs "Frame"
+    case id `lookup` (ppCategoryForPane prefs) of
+        Just group -> case group `lookup`  (ppPathForCategory prefs) of
+                        Nothing -> return (ppDefaultPath prefs)
+                        Just p  -> return p
+        Nothing    -> return (ppDefaultPath prefs)
 
 myActions :: [ActionDescr]
 myActions =
@@ -164,7 +176,7 @@ panesPrefs =
             readParser
             (\ a -> ppCategoryForPane a)
             (\ b a -> a{ppCategoryForPane = b})
-            (multisetEditor
+            (multisetEditor'
                 (ColumnsDescr True [
                     ColumnDescr{
                         tcdLabel = "Pane Id",
@@ -192,7 +204,7 @@ panesPrefs =
             readParser
             ppPathForCategory
             (\b a -> a{ppPathForCategory = b})
-            (multisetEditor
+            (multisetEditor'
                 (ColumnsDescr True [
                     ColumnDescr{
                         tcdLabel = "Pane category",

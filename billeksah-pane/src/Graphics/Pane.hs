@@ -19,14 +19,13 @@ module Graphics.Pane (
     panePluginInterface,
 
     module Graphics.Frame,
-    module Graphics.FrameTypes,
     module Graphics.Panes,
     module Graphics.Session
 
 ) where
 
 import Base
-import Graphics.FrameTypes
+
 import Graphics.Frame
 import Graphics.Panes
 import Graphics.Menu
@@ -67,9 +66,9 @@ frameInit2 :: BaseEvent -> EventChannel FrameEvent -> StateM ()
 frameInit2 baseEvent myEvent = do
     message Debug ("init2 " ++ panePluginName)
     uiManager <- reifyState (\stateR -> do
-        res <- unsafeInitGUIForThreadedRTS
+        res <- initGUI
         timeoutAddFull (yield >> return True) priorityHigh 100
-        messageR Debug ("unsafeInitGUIForThreadedRTS* " ++ show res) stateR
+        messageR Debug ("initGUI* " ++ show res) stateR
         uiManagerNew)
     liftIO $ initGtkRc
     res <- registerFrameState (initialFrameState uiManager)

@@ -35,7 +35,7 @@ import Base.Preferences (savePrefs, setPrefs)
 openPreferencesPane ::  StateM ()
 openPreferencesPane = do
     message Debug "Open preferences pane"
-    _mbPane :: Maybe PreferencesPane <- getOrBuildDisplay (Left []) True ()
+    _mbPane :: Maybe PreferencesPane <- getOrBuildDisplay Nothing True ()
     return ()
 
 -- ----------------------------------------------

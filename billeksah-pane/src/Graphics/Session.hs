@@ -25,7 +25,6 @@ module Graphics.Session (
 import Base
 import Graphics.Panes
 import Graphics.Frame
-import Graphics.FrameTypes
 import Graphics.Menu
 
 import Control.Monad.IO.Class (MonadIO(..))
@@ -88,8 +87,6 @@ recoverSession string = do
         Just err -> message Warning err
         otherwise -> return ()
     return ()
-
-
 
 -- ---------------------------------------------------------------------
 
@@ -262,6 +259,8 @@ recoverSession' :: String -> StateM (Maybe String)
 recoverSession' sessionString = catchState (do
     wdw         <-  getMainWindow
     let sessionSt = parseFieldsSimple sessionString sessionDescr defaultSession
+    extensions      <- getSessionExt
+    applyExtensions extensions (ssExtensions sessionSt)
     liftIO $ windowSetDefaultSize wdw (fst (ssWindowSize sessionSt))(snd (ssWindowSize sessionSt))
     applyLayout (ssLayout sessionSt)
     populate (ssPopulation sessionSt)
@@ -272,8 +271,6 @@ recoverSession' sessionString = catchState (do
             Nothing -> return ()
             Just (PaneC p) -> makeActive p []
     showToolbar (ssToolbarVisible sessionSt)
-    extensions      <- getSessionExt
-    applyExtensions extensions (ssExtensions sessionSt)
     return Nothing)
     (\ (e :: SomeException) -> do
         return $ Just ("Session>>recoverSession: " ++ show e))

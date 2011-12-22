@@ -33,8 +33,48 @@ import Base
 
 import Graphics.UI.Gtk
 import Data.Maybe (fromJust)
+import Data.Typeable (Typeable)
+import Graphics.Frame (GenPane)
+import Graphics.Panes (PanePath)
+
+
 
 panePluginName = "billeksah-pane"
+
+-- ----------------------------------
+-- * Events
+--
+data FrameEventSel = FrameEventSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector FrameEventSel where
+    type ValueType FrameEventSel = EventChannel FrameEvent
+
+--
+-- | Events the gui frame triggers
+--
+data FrameEvent =
+      ActivatePane String
+    | DeactivatePane String
+    | MovePane String
+    | ChangeLayout
+    | RegisterActions [ActionDescr]
+    | RegisterPane [(String, GenPane)]
+    | RegisterSessionExt [GenSessionExtension]
+    | RegisterStatusbarComp [CompDescr]
+    | PanePathForGroup String PanePath
+    | AboutToQuit Bool
+
+makeFrameEvent :: StateM(EventChannel FrameEvent)
+makeFrameEvent = makeEvent FrameEventSel
+
+triggerFrameEvent :: FrameEvent -> StateM(FrameEvent)
+triggerFrameEvent          = triggerEvent FrameEventSel
+
+getFrameEvent :: StateM (EventChannel FrameEvent)
+getFrameEvent              = getEvent FrameEventSel
+
+registerFrameEvent hdl = getFrameEvent >>= \ev -> registerEvent ev hdl
 
 ---------------------------------------------------------------------------------------
 -- * Types for Actions, Menus, Toolbars

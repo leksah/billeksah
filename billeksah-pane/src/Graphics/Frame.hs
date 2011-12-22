@@ -99,7 +99,6 @@ module Graphics.Frame (
 
 import Base
 import Graphics.Panes
-import Graphics.FrameTypes
 
 import Graphics.UI.Gtk hiding (afterToggleOverwrite,onToggleOverwrite)
 import Control.Monad.Reader
@@ -133,39 +132,7 @@ import Data.IORef(newIORef)
 trace a b = b
 
 
--- ----------------------------------
--- * Events
---
-data FrameEventSel = FrameEventSel
-    deriving (Eq, Ord, Show, Typeable)
 
-instance Selector FrameEventSel where
-    type ValueType FrameEventSel = EventChannel FrameEvent
-
---
--- | Events the gui frame triggers
---
-data FrameEvent =
-      ActivatePane String
-    | DeactivatePane String
-    | MovePane String
-    | ChangeLayout
-    | RegisterActions [ActionDescr]
-    | RegisterPane [(String, GenPane)]
-    | RegisterSessionExt [GenSessionExtension]
-    | RegisterStatusbarComp [CompDescr]
-    | AboutToQuit Bool
-
-makeFrameEvent :: StateM(EventChannel FrameEvent)
-makeFrameEvent = makeEvent FrameEventSel
-
-triggerFrameEvent :: FrameEvent -> StateM(FrameEvent)
-triggerFrameEvent          = triggerEvent FrameEventSel
-
-getFrameEvent :: StateM (EventChannel FrameEvent)
-getFrameEvent              = getEvent FrameEventSel
-
-registerFrameEvent hdl = getFrameEvent >>= \ev -> registerEvent ev hdl
 
 -- ------------------------------------
 -- * The state connected with frames
@@ -204,18 +171,6 @@ initialFrameState uim = FrameState {
 ,   fsSessionExt      =   []
 ,   fsToolbar         =   (Nothing)
 ,   fsStatusbar       =   (Map.empty,Nothing)}
-
-
-data GenPane        =   forall alpha beta . Pane alpha  => PaneC alpha
-
-instance Eq GenPane where
-    (==) (PaneC x) (PaneC y) = paneName x == paneName y
-
-instance Ord GenPane where
-    (<=) (PaneC x) (PaneC y) = paneName x <=  paneName y
-
-instance Show GenPane where
-    show (PaneC x)    = "Pane " ++ paneName x
 
 -- ---------------------------------------------------------------------
 -- * Accessor functions
@@ -346,35 +301,36 @@ class PaneInterface alpha => Pane alpha where
             then return Nothing
             else (return (Just $ head selectedPanes))
 
-    forceGetPane    ::  Either PanePath String  -> PaneArgs alpha -> StateM alpha
+    forceGetPane    ::  Maybe PanePath -> PaneArgs alpha -> StateM alpha
     -- ^get a pane of this type, if not one is open panic
-    forceGetPane pp arg =   do  mbPane <- getOrBuildPane pp arg
-                                case mbPane of
-                                    Nothing -> error "Can't get pane "
-                                    Just p -> return p
+    forceGetPane mbPP arg =   do
+        mbPane <- getOrBuildPane mbPP arg
+        case mbPane of
+            Nothing -> error "Can't get pane "
+            Just p  -> return p
 
-    getOrBuildPane  ::  Either PanePath String -> PaneArgs alpha -> StateM (Maybe alpha)
+    getOrBuildPane  ::  Maybe PanePath -> PaneArgs alpha -> StateM (Maybe alpha)
     -- ^get a pane of this type, if one is open, or build one and for this specify either
     -- a pane path to put it, or a group name, from which a pane path may be derived
-    getOrBuildPane ePpoPid arg =  do
+    getOrBuildPane mbPP arg =  do
         mbPane <- getPane
         case mbPane of
             Nothing -> do
-                pp          <-  case ePpoPid of
-                                    Right pId  -> getBestPathForId pId
-                                    Left ppp -> do
+                pp          <-  case mbPP of
+                                    Nothing  -> getBestPathForId (paneType (undefined :: alpha))
+                                    Just ppp -> do
                                         layout      <- getLayoutSt
                                         return (getBestPanePath ppp layout)
                 nb          <-  getNotebook pp
                 buildPanePrim pp nb (builder arg)
             Just pane ->   return (Just pane)
 
-    buildPane  ::  Either PanePath String -> PaneArgs alpha -> StateM (Maybe alpha)
+    buildPane  ::  Maybe PanePath -> PaneArgs alpha -> StateM (Maybe alpha)
     -- ^build a pane of this specific type
-    buildPane ePpoPid arg =  do
-        pp          <-  case ePpoPid of
-                            Right pId  -> getBestPathForId pId
-                            Left ppp -> do
+    buildPane mbPP arg =  do
+        pp          <-  case mbPP of
+                            Nothing  -> getBestPathForId (paneType (undefined :: alpha))
+                            Just ppp -> do
                                 layout      <- getLayoutSt
                                 return (getBestPanePath ppp layout)
         nb          <-  getNotebook pp
@@ -383,15 +339,17 @@ class PaneInterface alpha => Pane alpha where
 
     displayPane     ::  alpha -> Bool -> StateM ()
     -- ^ makes this pane visible
+    -- the boolean tells if this pane shall grab the focus
     displayPane pane shallGrabFocus = do
         liftIO $ bringPaneToFront pane
         when shallGrabFocus $ liftIO $ widgetGrabFocus $ getTopWidget pane
 
 
-    getOrBuildDisplay :: Either PanePath String -> Bool  -> PaneArgs alpha  -> StateM (Maybe alpha)
+    getOrBuildDisplay :: Maybe PanePath -> Bool  -> PaneArgs alpha  -> StateM (Maybe alpha)
     -- ^ is a concatination of getOrBuildPane and displayPane
-    getOrBuildDisplay pps b arg = do
-        mbP <- getOrBuildPane pps arg
+    -- the boolean tells if this pane shall grab the focus
+    getOrBuildDisplay mbPP b arg = do
+        mbP <- getOrBuildPane mbPP arg
         case mbP of
             Nothing -> return Nothing
             Just p  -> do
@@ -444,6 +402,58 @@ class PaneInterface alpha => Pane alpha where
             Nothing -> return ()
             Just nb -> markLabel nb topWidget hasChanged
 
+data GenPane        =   forall alpha beta . Pane alpha  => PaneC alpha
+
+instance Eq GenPane where
+    (==) (PaneC x) (PaneC y) = paneName x == paneName y
+
+instance Ord GenPane where
+    (<=) (PaneC x) (PaneC y) = paneName x <=  paneName y
+
+instance Show GenPane where
+    show (PaneC x)    = "Pane " ++ paneName x
+
+
+-- ----------------------------------
+-- * Events
+--
+
+data FrameEventSel = FrameEventSel
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Selector FrameEventSel where
+    type ValueType FrameEventSel = EventChannel FrameEvent
+
+--
+-- | Events the gui frame triggers
+--
+data FrameEvent =
+      ActivatePane String
+    | DeactivatePane String
+    | MovePane String
+    | ChangeLayout
+    | RegisterActions [ActionDescr]
+    | RegisterPane [(String, GenPane)]
+    | RegisterSessionExt [GenSessionExtension]
+    | RegisterStatusbarComp [CompDescr]
+    | PanePathForGroup String PanePath
+    | AboutToQuit Bool
+
+makeFrameEvent :: StateM(EventChannel FrameEvent)
+makeFrameEvent = makeEvent FrameEventSel
+
+triggerFrameEvent :: FrameEvent -> StateM(FrameEvent)
+triggerFrameEvent          = triggerEvent FrameEventSel
+
+getFrameEvent :: StateM (EventChannel FrameEvent)
+getFrameEvent              = getEvent FrameEventSel
+
+registerFrameEvent hdl = getFrameEvent >>= \ev -> registerEvent ev hdl
+
+panePathForGroup ::  String -> StateM PanePath
+panePathForGroup groupName =  do
+    PanePathForGroup _ res <- triggerFrameEvent (PanePathForGroup groupName [])
+    return res
 
 -- ---------------------------------------------------------------------
 -- Activating and deactivating Panes.

@@ -145,7 +145,7 @@ modifyStateM_ f = let f' a  = (f a,()) in do
     liftIO (atomicModifyIORef e f')
 
 --
--- | Variation on modifyIDE_ that lets you return a value
+-- | Variation on modifyStateM_ that lets you return a value
 --
 modifyStateM :: (TheState -> (TheState,beta)) -> StateM beta
 modifyStateM f = do

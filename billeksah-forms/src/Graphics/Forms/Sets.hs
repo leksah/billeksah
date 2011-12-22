@@ -18,6 +18,7 @@ module Graphics.Forms.Sets (
     ColumnDescr(..),
     tableEditor,
     multisetEditor,
+    multisetEditor',
     selectionEditor,
     filesEditor,
     stringsEditor
@@ -129,6 +130,13 @@ tableEditor ColumnsDescr {tcsdShowHeaders = showHeaders, tcsdColums = columns} p
                         containerAdd widget sw1
 
                         fill table listStore
+                        reflectState (do
+                            activateGUIEvent' listStore notifier
+                                (\ w h -> do
+                                    res     <-  after (castToTreeModel w) rowChanged (\ _ _ ->
+                                        h (Gtk.Event True) >> return ())
+                                    return (castCID res)) MayHaveChanged) stateR
+
                         writeIORef coreRef (Just listStore)
                 Just listStore -> liftIO $ do
                     fill table listStore)
@@ -361,13 +369,13 @@ multisetEditor :: (Show alpha, Default alpha, Eq alpha) => ColumnsDescr alpha
     -> Maybe ([alpha] -> [alpha]) -- ^ The 'mbSort' arg, a sort function if desired
     -> Maybe (alpha -> alpha -> Bool) -- ^ The 'mbReplace' arg, a function which is a criteria for removing an
                               --   old entry when adding a new value
-    -> Editor [alpha]
+    -> Editor ([alpha], Maybe alpha)
 multisetEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns}
                     (singleEditor, sParams) mbSort mbReplace parameters notifier = do
     coreRef <- liftIO $ newIORef Nothing
     cnoti   <- makeGUIEvent
     mkEditor
-        (\widget vs -> do
+        (\widget (vs,_) -> do
             core <- liftIO $ readIORef coreRef
             case core of
                 Nothing  -> do
@@ -387,16 +395,6 @@ multisetEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns}
                     liftIO $ containerAdd buttonBox addButton
                     liftIO $ containerAdd buttonBox removeButton
                     listStore   <-  liftIO $ listStoreNew ([]:: [alpha])
-                    activateGUIEvent' listStore notifier
-                        (\ w h -> do
-                            res     <-  after (castToTreeModel w) rowInserted (\ _ _ ->
-                                h (Gtk.Event True) >> return ())
-                            return (castCID res)) MayHaveChanged
-                    activateGUIEvent' listStore notifier
-                        (\ w h -> do
-                            res     <-  after (castToTreeModel w) rowDeleted (\ _ ->
-                                h (Gtk.Event True) >> return ())
-                            return (castCID res)) MayHaveChanged
                     treeView        <-  liftIO $ treeViewNewWithModel listStore
                     let ParaSize minSize =   getPara "MinSize" parameters
                     reifyState $ \ stateR -> do
@@ -419,12 +417,16 @@ multisetEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns}
                             ) columns
                         treeViewSetHeadersVisible treeView showHeaders
                         sel  `onSelectionChanged` selectionHandler sel listStore
-                            (\ a -> reflectState (injS a) stateR)
+                            (\ a -> do
+                                reflectState (injS a) stateR
+                                writeIORef coreRef (Just (listStore, Just a))
+                                )
                         boxPackStart box sw PackGrow 0
                         boxPackStart box buttonBox PackNatural 0
                         boxPackStart box frameS PackNatural 0
-                        reflectState (activateGUIEvent (castToWidget treeView) notifier FocusOut)
-                            stateR
+                        reflectState (do
+                            activateGUIEvent (castToWidget treeView) notifier FocusOut
+                            activateGUIEvent (castToWidget treeView) notifier ButtonPressed) stateR
                         containerAdd widget box
                         listStoreClear listStore
                         mapM_ (listStoreAppend listStore)
@@ -460,6 +462,10 @@ multisetEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns}
                                                 Nothing  -> return ()
                                                 Just col -> treeViewScrollToCell treeView [idx] col Nothing
                                         Nothing -> return ()
+                                    reflectState (triggerGUIEvent notifier
+                                                dummyGUIEvent {geSelector =
+                                                    MayHaveChanged}) stateR
+                                    return ()
                                 Nothing -> return ()
                         removeButton `onClicked` do
                             mbi <- treeSelectionGetSelected sel
@@ -468,9 +474,13 @@ multisetEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns}
                                 Just iter -> do
                                     [i] <- treeModelGetPath listStore iter
                                     listStoreRemove listStore i
-                        writeIORef coreRef (Just listStore)
+                                    reflectState (triggerGUIEvent notifier
+                                                dummyGUIEvent {geSelector =
+                                                    MayHaveChanged}) stateR
+                                    return ()
+                        writeIORef coreRef (Just (listStore, Nothing))
                         reflectState (injS getDefault) stateR
-                Just listStore -> liftIO $ do
+                Just (listStore,_) -> liftIO $ do
                     listStoreClear listStore
                     mapM_ (listStoreAppend listStore)
                         (case mbSort of
@@ -480,9 +490,9 @@ multisetEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns}
             core <- readIORef coreRef
             case core of
                 Nothing -> return Nothing
-                Just listStore -> do
+                Just (listStore,sel) -> do
                     v <- listStoreToList listStore
-                    return (Just v))
+                    return (Just (v, sel)))
         (("MinSize",ParaSize (-1,-1)) <<< parameters)
         notifier
     where
@@ -497,8 +507,25 @@ multisetEditor ColumnsDescr{tcsdShowHeaders = showHeaders, tcsdColums = columns}
                 inj v
                 return ()
 
+-- | Like a multiset editor, but doesn't return the selection
+multisetEditor' :: (Show alpha, Default alpha, Eq alpha) => ColumnsDescr alpha
+    -> (Editor alpha, Parameters)
+    -> Maybe ([alpha] -> [alpha]) -- ^ The 'mbSort' arg, a sort function if desired
+    -> Maybe (alpha -> alpha -> Bool) -- ^ The 'mbReplace' arg, a function which is a criteria for removing an
+                              --   old entry when adding a new value
+    -> Editor [alpha]
+multisetEditor' columns singleEditorPair mbSort mbReplace parameters notifier = do
+    (wid,inj,ext) <- multisetEditor columns singleEditorPair mbSort mbReplace parameters notifier
+    let pinj v = inj (v, Nothing)
+    let pext = do
+        s <- ext
+        case s of
+            Nothing -> return Nothing
+            Just (lis,_) -> return (Just lis)
+    return (wid, pinj, pext)
 
-filesEditor :: Maybe FilePath -> FileChooserAction -> String -> Editor [FilePath]
+
+filesEditor :: Maybe FilePath -> FileChooserAction -> String -> Editor ([FilePath], Maybe FilePath)
 filesEditor fp act label p =
     multisetEditor
         (ColumnsDescr False [
@@ -513,7 +540,7 @@ filesEditor fp act label p =
         (("Shadow", ParaShadow ShadowIn) <<<
             (("Direction", ParaDir Vertical) <<< p))
 
-stringsEditor :: (String -> Bool) -> Bool -> Editor [String]
+stringsEditor :: (String -> Bool) -> Bool -> Editor ([FilePath], Maybe FilePath)
 stringsEditor validation trimBlanks p =
     multisetEditor
         (ColumnsDescr False [

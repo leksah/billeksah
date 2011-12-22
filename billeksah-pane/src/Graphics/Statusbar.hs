@@ -18,7 +18,7 @@ module Graphics.Statusbar (
 )where
 
 import Base
-import Graphics.FrameTypes
+import Graphics.Panes
 
 import Graphics.UI.Gtk
 import Data.List (elemIndex, foldl')
