@@ -58,6 +58,8 @@ module Base.ConfigFile (
 ,   readFieldsSimple
 ,   parseFieldsSimple
 ,   showFieldsSimple
+
+,   prefsStyle
 ) where
 
 import Text.ParserCombinators.Parsec.Language
@@ -314,7 +316,6 @@ versionParser = trace "vp1" (do
     branch <-  sepBy1 intParser dot
     return Version{versionBranch=branch, versionTags=[]})
     <?> "version parser"
-
 
 intParser ::  CharParser () Int
 intParser = trace "ip1" (do
