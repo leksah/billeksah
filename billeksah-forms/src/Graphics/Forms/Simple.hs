@@ -447,7 +447,7 @@ comboSelectionEditor list showF parameters notifier = do
                                     h (Gtk.Event True)
                                     return ())
                                 return (unsafeCoerce res)) MayHaveChanged) stateR
-                    comboBoxSetActive combo 1
+                    when (not (null list)) $ comboBoxSetActive combo 0
                     containerAdd widget combo
                     let ind = elemIndex obj list
                     case ind of
