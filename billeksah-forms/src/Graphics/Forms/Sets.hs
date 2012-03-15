@@ -92,7 +92,7 @@ data ColumnDescr alpha = forall beta . CellRendererClass beta => ColumnDescr {
 --
 -- | An editor for a list of given elements in the form of a table
 --
-tableEditor :: (Show alpha, Eq alpha) => ColumnsDescr alpha -> Editor [alpha]
+tableEditor :: Eq alpha => ColumnsDescr alpha -> Editor [alpha]
 tableEditor ColumnsDescr {tcsdShowHeaders = showHeaders, tcsdColums = columns} parameters notifier = do
     coreRef <- liftIO $ newIORef Nothing
     mkEditor
@@ -151,9 +151,18 @@ tableEditor ColumnsDescr {tcsdShowHeaders = showHeaders, tcsdColums = columns} p
         notifier
   where
     fill table listStore = do
-        listStoreClear listStore
-        mapM_ (listStoreAppend listStore) table
-
+        size <- listStoreGetSize listStore
+        if length table /= size
+            then do
+                listStoreClear listStore
+                mapM_ (listStoreAppend listStore) table
+            else do
+                mapM_ (\ i -> do
+                    storedValue <- listStoreGetValue listStore i
+                    if storedValue == table !! i
+                        then return ()
+                        else listStoreSetValue listStore i (table !! i))
+                            [0..length table - 1]
 
 --
 -- | An editor for a selection from some given elements

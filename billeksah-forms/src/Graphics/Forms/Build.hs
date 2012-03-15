@@ -243,7 +243,7 @@ buildBoxEditor paras descrs dir v = do
 --
 -- | Function to construct a field description
 --
-mkFieldG :: Eq beta => MkFieldDescriptionG alpha beta
+mkFieldG :: MkFieldDescriptionG alpha beta
 mkFieldG name parameters getter setter editor =
     let realParas = ("Name", ParaString name) <<< parameters
     in FieldG realParas
