@@ -1143,7 +1143,7 @@ viewCollapse' panePath = do
                             mapM_ (\n -> move' (n,activeNotebook)) groupNames
                             -- 2. Remove unused notebook from admin
                             ppNb <- getPanePathFromNB
-                            let ! newMap = Map.delete otherSideNotebook ppNb
+                            let newMap = Map.delete otherSideNotebook ppNb
                             setPanePathFromNB newMap
                             -- 3. Remove one level and reparent notebook
                             mbParent <- liftIO $ widgetGetParent activeNotebook
